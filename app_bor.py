@@ -86,14 +86,13 @@ class MemorandumBOR_PDF(FPDF):
         self.cell(0, 6, f'  {titolo}', 0, 1, 'L', True)
         self.ln(2)
 
-def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, cliente, agente, note, acconto_proposto):
+def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, cliente, agente, note, acconto_proposto):
     pdf = MemorandumBOR_PDF(cliente, agente, note)
     pdf.set_auto_page_break(auto=False, margin=12)
     
     # ------------------ PAGINA 1 ------------------
     pdf.add_page()
     
-    # Riquadro Dati Intestazione Automatica
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 27, 190, 20, 'FD')
@@ -135,11 +134,10 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
     pdf.cell(26, 4, 'Note Esecutive:', 0, 0)
     pdf.set_font('Arial', 'I', 7)
     pdf.set_text_color(71, 85, 105)
-    pdf.cell(0, 4, safe_str(note) if note else 'Configurazione su misura in base all\'analisi dei varchi e vulnerabilita.', 0, 1)
+    pdf.cell(0, 4, safe_str(note) if note else "Configurazione su misura in base all'analisi dei varchi e vulnerabilita'.", 0, 1)
 
     pdf.set_y(51)
 
-    # 1. Quadro Comparativo Hardware a Corpo
     pdf.box_sezione("1. DIMENSIONAMENTO INFRASTRUTTURA HARDWARE (A CORPO)")
     pdf.set_font('Arial', '', 8)
     pdf.set_text_color(51, 65, 85)
@@ -179,7 +177,6 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
 
     pdf.set_y(start_y + 36)
 
-    # 2. Servizi di Ingegnerizzazione BOR
     pdf.box_sezione("2. SERVIZI DI INGEGNERIZZAZIONE E ATTIVAZIONE SISTEMA (INCLUSI)")
     pdf.set_font('Arial', '', 7.5)
     pdf.set_text_color(30, 41, 59)
@@ -202,7 +199,6 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
 
     pdf.ln(3)
 
-    # Note Posa in Opera
     pdf.set_fill_color(254, 242, 242)
     pdf.set_draw_color(254, 202, 202)
     pdf.rect(10, pdf.get_y(), 190, 14, 'FD')
@@ -217,7 +213,6 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
     # ------------------ PAGINA 2 ------------------
     pdf.add_page()
 
-    # 3. Canoni di Telepresenza
     pdf.box_sezione("3. CANONE MENSILE TELEPRESENZA E GUARDIANIA VIRTUALE")
     pdf.set_font('Arial', '', 8)
     pdf.set_text_color(51, 65, 85)
@@ -343,7 +338,6 @@ def analizza_pdf_goose(file_pdf):
             if not testo:
                 continue
             
-            # Estrazione automatica del Cliente dalla pagina 1
             if idx_pag == 0 and not cliente_estratto:
                 match_cl = re.search(r'INTESTATO\s+A\s*\n+([^\n\r]+)', testo, re.IGNORECASE)
                 if match_cl:
@@ -424,13 +418,6 @@ if os.path.exists("logo_bor.png"):
     st.image("logo_bor.png", width=220)
 st.title("Generatore Memorandum Commerciale")
 
-if "pdf_pronto" not in st.session_state:
-    st.session_state.pdf_pronto = False
-    st.session_state.pdf_bytes = None
-    st.session_state.pdf_nomefile = "Memorandum_BOR.pdf"
-    st.session_state.dati_soluzioni = None
-    st.session_state.cliente_estratto = ""
-
 col_sx, col_dx = st.columns([1, 2])
 
 with col_sx:
@@ -451,60 +438,52 @@ with col_sx:
 
 with col_dx:
     st.subheader("3. Caricamento Distinte Tecniche Goose")
+    st.info("Trascina qui i PDF esportati da Goose. L'intestatario (Cliente) verrà estratto in automatico.")
     pdf_base = st.file_uploader("Preventivo Goose - Soluzione BASE", type=["pdf"])
     pdf_media = st.file_uploader("Preventivo Goose - Soluzione MEDIA", type=["pdf"])
     pdf_full = st.file_uploader("Preventivo Goose - Soluzione FULL", type=["pdf"])
 
-    if st.button("🚀 ELABORA E GENERA MEMORANDUM PDF", type="primary"):
-        file_caricati = [("BASE", pdf_base), ("MEDIA", pdf_media), ("FULL", pdf_full)]
-        file_validi = [f for f in file_caricati if f[1] is not None]
+    file_caricati = [("BASE", pdf_base), ("MEDIA", pdf_media), ("FULL", pdf_full)]
+    file_validi = [f for f in file_caricati if f[1] is not None]
 
-        if not file_validi:
-            st.error("⚠️ Carica almeno un file PDF di Goose prima di procedere.")
-        else:
-            dati_soluzioni = {}
-            msb_globali = set()
-            cliente_finale = ""
+    if file_validi:
+        dati_soluzioni = {}
+        msb_globali = set()
+        cliente_finale = ""
 
-            for nome, file in file_validi:
-                res = analizza_pdf_goose(file)
-                assistenza = calcola_assistenza_bor(res["nodi_totali"])
-                totale_finale = res["totale_hw"] + assistenza
-                dati_soluzioni[nome] = {"dati": res, "assistenza": assistenza, "totale_finale": totale_finale}
-                msb_globali.update(res["trigger_msb"])
-                if not cliente_finale and res["cliente"]:
-                    cliente_finale = res["cliente"]
+        for nome, file in file_validi:
+            res = analizza_pdf_goose(file)
+            assistenza = calcola_assistenza_bor(res["nodi_totali"])
+            totale_finale = res["totale_hw"] + assistenza
+            dati_soluzioni[nome] = {"dati": res, "assistenza": assistenza, "totale_finale": totale_finale}
+            msb_globali.update(res["trigger_msb"])
+            if not cliente_finale and res["cliente"]:
+                cliente_finale = res["cliente"]
 
-            st.session_state.cliente_estratto = cliente_finale
-            nome_file_pulito = f"Memorandum_BOR_{cliente_finale.strip().replace(' ', '_') if cliente_finale else 'Bozza'}.pdf"
-            
-            pdf_bytes = genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_globali, cliente_finale, agente, note, acconto)
-            
-            st.session_state.pdf_pronto = True
-            st.session_state.pdf_bytes = pdf_bytes
-            st.session_state.pdf_nomefile = nome_file_pulito
-            st.session_state.dati_soluzioni = dati_soluzioni
-
-if st.session_state.pdf_pronto and st.session_state.pdf_bytes is not None:
-    st.markdown("---")
-    st.success(f"🎉 **Memorandum generato con successo per: {st.session_state.cliente_estratto or 'Cliente Rilevato'}**")
-    
-    st.download_button(
-        label="📥 SCARICA MEMORANDUM PDF UFFICIALE (2 PAGINE)",
-        data=st.session_state.pdf_bytes,
-        file_name=st.session_state.pdf_nomefile,
-        mime="application/pdf",
-        type="primary"
-    )
-    
-    st.markdown("---")
-    st.header("📋 ANTEPRIMA DEI VALORI CALCOLATI A CORPO")
-    cols = st.columns(len(st.session_state.dati_soluzioni))
-    idx = 0
-    for nome, sol in st.session_state.dati_soluzioni.items():
-        with cols[idx]:
-            st.subheader(f"Opzione {nome}")
-            st.metric("Investimento a Corpo", f"Euro {sol['totale_finale']:,.2f} + IVA")
-            st.write(f"- Nodi Video Rilevati: **{sol['dati']['nodi_cam']}**")
-            st.write(f"- Quota Ingegnerizzazione Inclusa: Euro {sol['assistenza']:,.2f}")
-        idx += 1
+        nome_file_pulito = f"Memorandum_BOR_{cliente_finale.strip().replace(' ', '_') if cliente_finale else 'Bozza'}.pdf"
+        
+        pdf_bytes = genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_globali, cliente_finale, agente, note, acconto)
+        
+        st.markdown("---")
+        st.success(f"🎉 **Memorandum elaborato in automatico per: {cliente_finale or 'Cliente Rilevato'}**")
+        
+        st.download_button(
+            label="📥 ELABORA E SCARICA MEMORANDUM PDF",
+            data=pdf_bytes,
+            file_name=nome_file_pulito,
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
+        
+        st.markdown("---")
+        st.header("📋 ANTEPRIMA DEI VALORI CALCOLATI A CORPO")
+        cols = st.columns(len(dati_soluzioni))
+        idx = 0
+        for nome, sol in dati_soluzioni.items():
+            with cols[idx]:
+                st.subheader(f"Opzione {nome}")
+                st.metric("Investimento a Corpo", f"Euro {sol['totale_finale']:,.2f} + IVA")
+                st.write(f"- Nodi Video Rilevati: **{sol['dati']['nodi_cam']}**")
+                st.write(f"- Quota Ingegnerizzazione Inclusa: Euro {sol['assistenza']:,.2f}")
+            idx += 1
