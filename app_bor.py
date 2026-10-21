@@ -389,8 +389,7 @@ st.set_page_config(
     page_icon=icona_bor,
     layout="wide",)
 if os.path.exists("logo_bor.png"):
-    st.image("logo_bor.png", width=260)
-st.image("logo_bor.png", width=250)
+st.image("logo_bor.png", width=240)
 st.title("Generatore Memorandum Commerciale")
 
 if "pdf_pronto" not in st.session_state:
