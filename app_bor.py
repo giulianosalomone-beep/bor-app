@@ -5,8 +5,10 @@ from fpdf import FPDF
 import tempfile
 import datetime
 import os
-from PIL import Image
 
+# ==========================================
+# GESTIONE SICURA DEI TESTI PER IL PDF
+# ==========================================
 def safe_str(testo):
     if not testo:
         return ""
@@ -19,6 +21,9 @@ def safe_str(testo):
         testo = testo.replace(k, v)
     return testo.encode('latin-1', 'replace').decode('latin-1')
 
+# ==========================================
+# CONFIGURAZIONE PARAMETRI E TARIFFE BOR
+# ==========================================
 TARIFFE_CORE = [(4, 100.0), (8, 150.0), (16, 200.0), (32, 300.0), (48, 400.0), (64, 500.0)]
 HELP_DESK_TIERS = [(8, 25.0), (16, 35.0), (32, 45.0), (48, 60.0), (64, 75.0)]
 COSTO_CHAT = 15.0
@@ -32,12 +37,14 @@ MOLTIPLICATORI_PROFILO = {
 }
 ASSISTENZA_BOR_TIERS = [(4, 100.0), (8, 150.0), (16, 250.0), (32, 400.0), (48, 600.0)]
 
+# ==========================================
+# CLASSE PDF MEMORANDUM BOR
+# ==========================================
 class MemorandumBOR_PDF(FPDF):
-    def __init__(self, cliente, agente, sede, note_progetto):
+    def __init__(self, cliente, agente, note_progetto):
         super().__init__()
         self.cliente = safe_str(cliente)
         self.agente = safe_str(agente)
-        self.sede = safe_str(sede)
         self.note_progetto = safe_str(note_progetto)
 
     def header(self):
@@ -79,22 +86,25 @@ class MemorandumBOR_PDF(FPDF):
         self.cell(0, 6, f'  {titolo}', 0, 1, 'L', True)
         self.ln(2)
 
-def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, cliente, agente, sede, note, acconto_proposto):
-    pdf = MemorandumBOR_PDF(cliente, agente, sede, note)
+def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, cliente, agente, note, acconto_proposto):
+    pdf = MemorandumBOR_PDF(cliente, agente, note)
     pdf.set_auto_page_break(auto=False, margin=12)
     
+    # ------------------ PAGINA 1 ------------------
     pdf.add_page()
+    
+    # Riquadro Dati Intestazione Automatica
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
-    pdf.rect(10, 27, 190, 24, 'FD')
+    pdf.rect(10, 27, 190, 20, 'FD')
     
     pdf.set_xy(12, 29)
-    pdf.set_font('Arial', 'B', 8)
+    pdf.set_font('Arial', 'B', 8.5)
     pdf.set_text_color(30, 58, 138)
-    pdf.cell(25, 4, 'Cliente / Ditta:', 0, 0)
-    pdf.set_font('Arial', '', 8)
-    pdf.set_text_color(30, 41, 59)
-    pdf.cell(70, 4, safe_str(cliente) if cliente else 'Da specificare', 0, 0)
+    pdf.cell(26, 4, 'Cliente / Ditta:', 0, 0)
+    pdf.set_font('Arial', 'B', 8.5)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(80, 4, safe_str(cliente) if cliente else 'Come da distinta tecnica', 0, 0)
     
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(30, 58, 138)
@@ -106,28 +116,30 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
     pdf.set_xy(12, 34)
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(30, 58, 138)
-    pdf.cell(25, 4, 'Sede Impianto:', 0, 0)
-    pdf.set_font('Arial', '', 8)
-    pdf.set_text_color(30, 41, 59)
-    pdf.cell(70, 4, safe_str(sede) if sede else 'Come da sopralluogo', 0, 0)
-
-    pdf.set_font('Arial', 'B', 8)
-    pdf.set_text_color(30, 58, 138)
-    pdf.cell(28, 4, 'Data & Regime:', 0, 0)
+    pdf.cell(26, 4, 'Data & Validita\':', 0, 0)
     pdf.set_font('Arial', '', 8)
     pdf.set_text_color(30, 41, 59)
     data_str = datetime.datetime.now().strftime("%d/%m/%Y")
-    pdf.cell(0, 4, f'{data_str} | {safe_str(tipo_contratto)}', 0, 1)
+    pdf.cell(80, 4, f'{data_str} | Proposta Riservata', 0, 0)
+
+    pdf.set_font('Arial', 'B', 8)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(28, 4, 'Regime Impianto:', 0, 0)
+    pdf.set_font('Arial', '', 8)
+    pdf.set_text_color(30, 41, 59)
+    pdf.cell(0, 4, safe_str(tipo_contratto), 0, 1)
 
     pdf.set_xy(12, 39)
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(30, 58, 138)
-    pdf.cell(25, 4, 'Note Operative:', 0, 0)
+    pdf.cell(26, 4, 'Note Esecutive:', 0, 0)
     pdf.set_font('Arial', 'I', 7)
     pdf.set_text_color(71, 85, 105)
     pdf.cell(0, 4, safe_str(note) if note else 'Configurazione su misura in base all\'analisi dei varchi e vulnerabilita.', 0, 1)
 
-    pdf.set_y(54)
+    pdf.set_y(51)
+
+    # 1. Quadro Comparativo Hardware a Corpo
     pdf.box_sezione("1. DIMENSIONAMENTO INFRASTRUTTURA HARDWARE (A CORPO)")
     pdf.set_font('Arial', '', 8)
     pdf.set_text_color(51, 65, 85)
@@ -166,6 +178,8 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
         idx += 1
 
     pdf.set_y(start_y + 36)
+
+    # 2. Servizi di Ingegnerizzazione BOR
     pdf.box_sezione("2. SERVIZI DI INGEGNERIZZAZIONE E ATTIVAZIONE SISTEMA (INCLUSI)")
     pdf.set_font('Arial', '', 7.5)
     pdf.set_text_color(30, 41, 59)
@@ -186,7 +200,9 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
         pdf.set_text_color(51, 65, 85)
         pdf.cell(0, 4.2, desc, 0, 1)
 
-    pdf.ln(2)
+    pdf.ln(3)
+
+    # Note Posa in Opera
     pdf.set_fill_color(254, 242, 242)
     pdf.set_draw_color(254, 202, 202)
     pdf.rect(10, pdf.get_y(), 190, 14, 'FD')
@@ -198,7 +214,10 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
     pdf.set_text_color(69, 10, 10)
     pdf.multi_cell(0, 3.5, "La posa canaline e stesura cavi e' esclusa dal presente modulo e puo' essere affidata all'elettricista di fiducia del cliente (guidato dalla nostra Direzione Lavori) oppure appaltata a un Installatore Partner Certificato BOR con preventivo a parte.")
 
+    # ------------------ PAGINA 2 ------------------
     pdf.add_page()
+
+    # 3. Canoni di Telepresenza
     pdf.box_sezione("3. CANONE MENSILE TELEPRESENZA E GUARDIANIA VIRTUALE")
     pdf.set_font('Arial', '', 8)
     pdf.set_text_color(51, 65, 85)
@@ -254,6 +273,7 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
             pdf.cell(0, 5, f'+ Euro {msb_prezzo:,.2f} / mese', 0, 1, 'R')
         pdf.ln(2)
 
+    # 5. Condizioni Contrattuali, Garanzia e Tutela 20%
     pdf.box_sezione("5. CLAUSOLE DI SALVAGUARDIA, GARANZIE E ACCONTO")
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
@@ -306,18 +326,31 @@ def genera_pdf_bytes(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, c
         pass
     return bytes_out
 
+# ==========================================
+# PARSER PDF GOOSE CON ESTRAZIONE CLIENTE
+# ==========================================
 def analizza_pdf_goose(file_pdf):
     articoli = []
     totale_importo_hardware = 0.0
     nodi_cam = 0
     nodi_totali = 0
     trigger_msb = set()
+    cliente_estratto = ""
 
     with pdfplumber.open(file_pdf) as pdf:
-        for pagina in pdf.pages:
+        for idx_pag, pagina in enumerate(pdf.pages):
             testo = pagina.extract_text()
             if not testo:
                 continue
+            
+            # Estrazione automatica del Cliente dalla pagina 1
+            if idx_pag == 0 and not cliente_estratto:
+                match_cl = re.search(r'INTESTATO\s+A\s*\n+([^\n\r]+)', testo, re.IGNORECASE)
+                if match_cl:
+                    candidato = match_cl.group(1).strip()
+                    if not candidato.startswith(('TEL', 'CODICE', 'EMAIL', 'IBAN')):
+                        cliente_estratto = candidato
+
             for riga in testo.split('\n'):
                 match = re.search(r'^([A-Z0-9_\-\+]+)\s+(.+?)\s+NR\s+(\d+)\s+([\d\.,]+)', riga)
                 if match:
@@ -356,7 +389,8 @@ def analizza_pdf_goose(file_pdf):
         "totale_hw": totale_importo_hardware,
         "nodi_cam": nodi_cam,
         "nodi_totali": nodi_totali,
-        "trigger_msb": trigger_msb
+        "trigger_msb": trigger_msb,
+        "cliente": cliente_estratto
     }
 
 def calcola_canone(nodi_cam, k_profilo, k_ambiente):
@@ -380,16 +414,14 @@ def calcola_assistenza_bor(nodi_totali):
         if nodi_totali <= limite:
             return tariffa
     return 800.0 + (nodi_totali - 48) * 15.0
-icona_bor = (Image.open("logo_bor.png") if os.path.exists("logo_bor.png") else None
 
-    icona_bor = (Image.open("logo_bor.png") if os.path.exists("logo_bor.png") else None)
+# ==========================================
+# INTERFACCIA STREAMLIT
+# ==========================================
+st.set_page_config(page_title="BOR Security - Generatore Memorandum", page_icon="logo_bor.png" if os.path.exists("logo_bor.png") else None, layout="wide")
 
-st.set_page_config(
-    page_title="BOR Security - Generatore Memorandum",
-    page_icon=icona_bor,
-    layout="wide",)
 if os.path.exists("logo_bor.png"):
-st.image("logo_bor.png", width=240)
+    st.image("logo_bor.png", width=220)
 st.title("Generatore Memorandum Commerciale")
 
 if "pdf_pronto" not in st.session_state:
@@ -397,16 +429,15 @@ if "pdf_pronto" not in st.session_state:
     st.session_state.pdf_bytes = None
     st.session_state.pdf_nomefile = "Memorandum_BOR.pdf"
     st.session_state.dati_soluzioni = None
+    st.session_state.cliente_estratto = ""
 
 col_sx, col_dx = st.columns([1, 2])
 
 with col_sx:
-    st.subheader("1. Dati Intestazione Documento")
-    cliente = st.text_input("Ragione Sociale / Nome Cliente", placeholder="Es. Rossi & Figli S.p.A.")
-    sede = st.text_input("Sede Impianto", placeholder="Es. Via Roma 12, Caserta")
+    st.subheader("1. Dati Gestionali Offerta")
     agente = st.text_input("Security Manager (Agente)", placeholder="Es. Giuliano Salomone")
     acconto = st.text_input("Acconto Proposto (Euro)", placeholder="Es. 1.500,00")
-    note = st.text_area("Note e Personalizzazioni (Sopralluogo)", placeholder="Es. Attenzione al varco nord...")
+    note = st.text_area("Note e Personalizzazioni Esecutive", placeholder="Es. Riconfigurazione varchi perimetrali...")
 
     st.subheader("2. Parametri Tecnici e Rischio")
     tipo_contratto = st.radio("Tipologia Contratto", ["Business (Garanzia 12 mesi)", "Residenziale (Garanzia 24 mesi)"])
@@ -433,6 +464,7 @@ with col_dx:
         else:
             dati_soluzioni = {}
             msb_globali = set()
+            cliente_finale = ""
 
             for nome, file in file_validi:
                 res = analizza_pdf_goose(file)
@@ -440,10 +472,13 @@ with col_dx:
                 totale_finale = res["totale_hw"] + assistenza
                 dati_soluzioni[nome] = {"dati": res, "assistenza": assistenza, "totale_finale": totale_finale}
                 msb_globali.update(res["trigger_msb"])
+                if not cliente_finale and res["cliente"]:
+                    cliente_finale = res["cliente"]
 
-            nome_file_pulito = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Bozza'}.pdf"
+            st.session_state.cliente_estratto = cliente_finale
+            nome_file_pulito = f"Memorandum_BOR_{cliente_finale.strip().replace(' ', '_') if cliente_finale else 'Bozza'}.pdf"
             
-            pdf_bytes = genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_globali, cliente, agente, sede, note, acconto)
+            pdf_bytes = genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_globali, cliente_finale, agente, note, acconto)
             
             st.session_state.pdf_pronto = True
             st.session_state.pdf_bytes = pdf_bytes
@@ -452,10 +487,10 @@ with col_dx:
 
 if st.session_state.pdf_pronto and st.session_state.pdf_bytes is not None:
     st.markdown("---")
-    st.success("🎉 **Il Memorandum PDF e' stato generato con successo ed e' pronto per la stampa!**")
+    st.success(f"🎉 **Memorandum generato con successo per: {st.session_state.cliente_estratto or 'Cliente Rilevato'}**")
     
     st.download_button(
-        label="📥 CLICCA QUI PER SCARICARE IL MEMORANDUM PDF UFFICIALE (2 PAGINE)",
+        label="📥 SCARICA MEMORANDUM PDF UFFICIALE (2 PAGINE)",
         data=st.session_state.pdf_bytes,
         file_name=st.session_state.pdf_nomefile,
         mime="application/pdf",
