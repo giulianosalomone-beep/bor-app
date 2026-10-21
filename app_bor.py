@@ -41,8 +41,8 @@ ASSISTENZA_BOR_TIERS = [(4, 100.0), (8, 150.0), (16, 250.0), (32, 400.0), (48, 6
 # MOTORE DI CATEGORIZZAZIONE ARTICOLI
 # ==========================================
 def categorizza_componente(codice, desc):
-    c_upper = codice.upper()
-    d_upper = desc.upper()
+    c_upper = str(codice).upper()
+    d_upper = str(desc).upper()
     
     if any(s in c_upper for s in ['AIVISION', 'LABSETUP', 'LIVETESTING', 'PROJECTMANAGEMENT', 'TECHNICALDESIGN', 'LIVE TESTING']):
         return "Servizi Attivazione"
@@ -130,6 +130,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     # ------------------ PAGINA 1 ------------------
     pdf.add_page()
     
+    # Intestazione Automatica
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 26, 190, 18, 'FD')
@@ -227,7 +228,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
 
     pdf.ln(2)
 
-    # 3. Servizi BOR per l'Attivazione del Sistema
+    # 3. Servizi BOR per l'Attivazione
     pdf.box_sezione("3. SERVIZI BOR PER L'ATTIVAZIONE DEL SISTEMA (INCLUSI)")
     servizi_elenco = [
         ("Progettazione Tecnica Esecutiva", "Analisi vulnerabilita', coni visivi e piano planimetrico di copertura."),
@@ -391,56 +392,71 @@ def analizza_pdf_goose(file_pdf):
         "Servizi Attivazione": []
     }
 
-    with pdfplumber.open(file_pdf) as pdf:
-        for idx_pag, pagina in enumerate(pdf.pages):
-            testo = pagina.extract_text()
-            if not testo:
-                continue
-            
-            if idx_pag == 0 and not cliente_estratto:
-                match_cl = re.search(r'INTESTATO\s+A\s*\n+([^\n\r]+)', testo, re.IGNORECASE)
-                if match_cl:
-                    candidato = match_cl.group(1).strip()
-                    if not candidato.startswith(('TEL', 'CODICE', 'EMAIL', 'IBAN')):
-                        cliente_estratto = candidato
+    try:
+        with pdfplumber.open(file_pdf) as pdf:
+            for idx_pag, pagina in enumerate(pdf.pages):
+                testo = pagina.extract_text()
+                if not testo:
+                    continue
+                
+                if idx_pag == 0 and not cliente_estratto:
+                    match_cl = re.search(r'INTESTATO\s+A\s*[\n\r]+([^\n\r]+)', testo, re.IGNORECASE)
+                    if match_cl:
+                        candidato = match_cl.group(1).strip()
+                        if not candidato.startswith(('TEL', 'CODICE', 'EMAIL', 'IBAN')):
+                            cliente_estratto = candidato
 
-            for riga in testo.split('\n'):
-                match = re.search(r'^([A-Z0-9_\-\+]+)\s+(.+?)\s+NR\s+(\d+)\s+([\d\.,]+)', riga)
-                if match:
-                    codice = match.group(1)
-                    descrizione = match.group(2).strip()
-                    qt = int(match.group(3))
-                    importo_str = match.group(4).replace('.', '').replace(',', '.')
-                    try:
-                        importo = float(importo_str)
-                    except ValueError:
-                        importo = 0.0
+                lines = testo.split('\n')
+                curr_code = None
+                curr_desc = []
 
-                    if any(serv in codice for serv in ['H24', 'CHAT', 'MON-TEC', 'BORGUARD']):
+                for riga in lines:
+                    riga_s = riga.strip()
+                    if not riga_s:
                         continue
 
-                    cat = categorizza_componente(codice, descrizione)
-                    per_categoria[cat].append({"codice": codice, "desc": descrizione, "qt": qt})
+                    m_num = re.search(r'NR\s+(\d+)\s+([\d\.,\s]+?)(?:022|\d{3})?$', riga_s)
+                    if m_num and curr_code:
+                        qt = int(m_num.group(1))
+                        parts = m_num.group(2).strip().split()
+                        imp = float(parts[-1].replace('.', '').replace(',', '.')) if parts else 0.0
+                        full_desc = " ".join(curr_desc).replace('\t', ' ').strip()
+                        
+                        cat = categorizza_componente(curr_code, full_desc)
+                        per_categoria[cat].append({"codice": curr_code, "desc": full_desc, "qt": qt})
 
-                    if cat == "Servizi Attivazione":
+                        if cat != "Servizi Attivazione":
+                            articoli.append({"codice": curr_code, "descrizione": full_desc, "qt": qt, "importo": imp, "cat": cat})
+                            totale_importo_hardware += imp
+
+                            if cat == "Videosorveglianza":
+                                if not 'VISIONSERVER' in curr_code.upper():
+                                    nodi_cam += qt
+                                nodi_totali += qt
+                            elif cat in ["Audio e Diffusione", "Controllo Varchi e Dissuasione Attiva"]:
+                                nodi_totali += qt
+
+                            if 'COERCIZ' in curr_code or 'T-ARAP' in curr_code:
+                                trigger_msb.add(("MSB Antirapina H24", 69.0))
+                            if 'KITRCA' in curr_code or 'GATECHECK' in curr_code:
+                                trigger_msb.add(("MSB Controllo Varchi Gate Check", 29.0))
+                            if 'AU' in curr_code or 'NEB' in curr_code:
+                                trigger_msb.add(("MSB Attivazione Nebbiogeni", 39.0))
+
+                        curr_code = None
+                        curr_desc = []
                         continue
 
-                    articoli.append({"codice": codice, "descrizione": descrizione, "qt": qt, "importo": importo, "cat": cat})
-                    totale_importo_hardware += importo
-
-                    if cat == "Videosorveglianza":
-                        if not 'VISIONSERVER' in codice.upper():
-                            nodi_cam += qt
-                        nodi_totali += qt
-                    elif cat in ["Audio e Diffusione", "Controllo Varchi e Dissuasione Attiva"]:
-                        nodi_totali += qt
-
-                    if 'COERCIZ' in codice or 'T-ARAP' in codice:
-                        trigger_msb.add(("MSB Antirapina H24", 69.0))
-                    if 'KITRCA' in codice or 'GATECHECK' in codice:
-                        trigger_msb.add(("MSB Controllo Varchi Gate Check", 29.0))
-                    if 'AU' in codice or 'NEB' in codice:
-                        trigger_msb.add(("MSB Attivazione Nebbiogeni", 39.0))
+                    m_code = re.match(r'^([A-Z0-9_\-\+]{3,28})\s+(.*)$', riga_s)
+                    ignora_testata = ['OFFERTA', 'TIPO', 'CODICE', 'MANDANTE', 'MODALITA', 'INTESTATO', 'BANCA', 'EURO', 'VALUTA', 'TOTALE', 'SPESE', 'FIRMA', 'SISTEMA', 'IL', 'PER']
+                    if m_code and not any(m_code.group(1).upper().startswith(kw) for kw in ignora_testata):
+                        curr_code = m_code.group(1)
+                        curr_desc = [m_code.group(2)]
+                    elif curr_code:
+                        curr_desc.append(riga_s)
+                        
+    except Exception:
+        pass
 
     return {
         "articoli": articoli,
@@ -479,12 +495,6 @@ def calcola_assistenza_bor(nodi_totali):
 # ==========================================
 st.set_page_config(page_title="BOR Security - Generatore Memorandum", page_icon="logo_bor.png" if os.path.exists("logo_bor.png") else None, layout="wide")
 
-if "pdf_bytes" not in st.session_state:
-    st.session_state.pdf_bytes = None
-    st.session_state.pdf_nomefile = "Memorandum_BOR.pdf"
-    st.session_state.dati_soluzioni = None
-    st.session_state.cliente_estratto = ""
-
 if os.path.exists("logo_bor.png"):
     st.image("logo_bor.png", width=220)
 st.title("Generatore Memorandum Commerciale")
@@ -518,11 +528,11 @@ with col_dx:
     file_validi = [f for f in file_caricati if f[1] is not None]
 
     st.markdown("---")
-    
-    # PULSANTE FISSO IN EVIDENZA
-    if st.button("🚀 ELABORA E GENERA MEMORANDUM PDF", type="primary", use_container_width=True):
+
+    # PULSANTE DI ELABORAZIONE UNICO
+    if st.button("🚀 ELABORA E SCARICA MEMORANDUM PDF", type="primary", use_container_width=True):
         if not file_validi:
-            st.warning("⚠️ Carica almeno un file PDF di Goose prima di elaborare.")
+            st.warning("⚠️ Carica almeno un file PDF di Goose prima di procedere.")
         else:
             dati_soluzioni = {}
             msb_globali = set()
@@ -538,45 +548,37 @@ with col_dx:
                     cliente_finale = res["cliente"]
 
             nome_file_pulito = f"Memorandum_BOR_{cliente_finale.strip().replace(' ', '_') if cliente_finale else 'Bozza'}.pdf"
-            
             pdf_bytes = genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_globali, cliente_finale, agente, note, acconto)
             
-            st.session_state.pdf_bytes = pdf_bytes
-            st.session_state.pdf_nomefile = nome_file_pulito
-            st.session_state.dati_soluzioni = dati_soluzioni
-            st.session_state.cliente_estratto = cliente_finale
+            st.success(f"🎉 **Memorandum pronto per: {cliente_finale or 'Cliente Rilevato'}**")
+            st.download_button(
+                label="📥 CLICCA QUI PER SCARICARE IL PDF UFFICIALE (2 PAGINE)",
+                data=pdf_bytes,
+                file_name=nome_file_pulito,
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True
+            )
+            
+            st.markdown("---")
+            st.header("📋 SINTESI ECONOMICA A CORPO")
+            cols = st.columns(len(dati_soluzioni))
+            idx = 0
+            for nome, sol in dati_soluzioni.items():
+                with cols[idx]:
+                    st.subheader(f"Opzione {nome}")
+                    st.metric("Investimento Infrastruttura", f"Euro {sol['totale_finale']:,.2f} + IVA")
+                    st.write(f"- Nodi Video Rilevati: **{sol['dati']['nodi_cam']}**")
+                    st.write(f"- Quota Ingegnerizzazione Inclusa: Euro {sol['assistenza']:,.2f}")
+                idx += 1
 
-    # SE GENERATO, MOSTRA DOWNLOAD ED ELENCO MACROCATEGORIE
-    if st.session_state.pdf_bytes is not None:
-        st.success(f"🎉 **Memorandum pronto per: {st.session_state.cliente_estratto or 'Cliente Rilevato'}**")
-        st.download_button(
-            label="📥 SCARICA IL TUO MEMORANDUM PDF UFFICIALE (2 PAGINE)",
-            data=st.session_state.pdf_bytes,
-            file_name=st.session_state.pdf_nomefile,
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
-        
-        st.markdown("---")
-        st.header("📋 SINTESI ECONOMICA A CORPO")
-        cols = st.columns(len(st.session_state.dati_soluzioni))
-        idx = 0
-        for nome, sol in dati_soluzioni.items():
-            with cols[idx]:
-                st.subheader(f"Opzione {nome}")
-                st.metric("Investimento Infrastruttura", f"Euro {sol['totale_finale']:,.2f} + IVA")
-                st.write(f"- Nodi Video Rilevati: **{sol['dati']['nodi_cam']}**")
-                st.write(f"- Quota Ingegnerizzazione Inclusa: Euro {sol['assistenza']:,.2f}")
-            idx += 1
-
-        st.markdown("---")
-        st.header("🔍 COMPONENTI RAGGRUPPATI PER MACROCATEGORIA")
-        for nome_opz, sol_obj in st.session_state.dati_soluzioni.items():
-            with st.expander(f"Visualizza distinta categorizzata: Opzione {nome_opz}", expanded=True):
-                cat_dict = sol_obj["dati"]["per_categoria"]
-                for c_name, p_list in cat_dict.items():
-                    if c_name != "Servizi Attivazione" and p_list:
-                        st.markdown(f"**{c_name}:**")
-                        for p in p_list:
-                            st.write(f"- {p['qt']}x {p['desc']}")
+            st.markdown("---")
+            st.header("🔍 COMPONENTI RAGGRUPPATI PER MACROCATEGORIA")
+            for nome_opz, sol_obj in dati_soluzioni.items():
+                with st.expander(f"Visualizza distinta categorizzata: Opzione {nome_opz}", expanded=True):
+                    cat_dict = sol_obj["dati"]["per_categoria"]
+                    for c_name, p_list in cat_dict.items():
+                        if c_name != "Servizi Attivazione" and p_list:
+                            st.markdown(f"**{c_name}:**")
+                            for p in p_list:
+                                st.write(f"- {p['qt']}x {p['desc']}")
