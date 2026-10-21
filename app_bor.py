@@ -93,6 +93,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     # ------------------ PAGINA 1 ------------------
     pdf.add_page()
     
+    # Riquadro Intestazione (Senza campo Sede)
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 27, 190, 20, 'FD')
@@ -138,6 +139,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
 
     pdf.set_y(51)
 
+    # 1. Investimento Hardware a Corpo
     pdf.box_sezione("1. DIMENSIONAMENTO INFRASTRUTTURA HARDWARE (A CORPO)")
     pdf.set_font('Arial', '', 8)
     pdf.set_text_color(51, 65, 85)
@@ -177,6 +179,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
 
     pdf.set_y(start_y + 36)
 
+    # 2. Servizi di Ingegnerizzazione BOR
     pdf.box_sezione("2. SERVIZI DI INGEGNERIZZAZIONE E ATTIVAZIONE SISTEMA (INCLUSI)")
     pdf.set_font('Arial', '', 7.5)
     pdf.set_text_color(30, 41, 59)
@@ -213,6 +216,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     # ------------------ PAGINA 2 ------------------
     pdf.add_page()
 
+    # 3. Canoni di Telepresenza
     pdf.box_sezione("3. CANONE MENSILE TELEPRESENZA E GUARDIANIA VIRTUALE")
     pdf.set_font('Arial', '', 8)
     pdf.set_text_color(51, 65, 85)
@@ -254,6 +258,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
 
     pdf.ln(3)
 
+    # 4. Moduli MSB Opzionali
     if msb_rilevati:
         pdf.box_sezione("4. UPGRADE SERVIZI PERSONALIZZATI (MSB)")
         pdf.set_font('Arial', '', 7.5)
