@@ -130,7 +130,6 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     # ------------------ PAGINA 1 ------------------
     pdf.add_page()
     
-    # Intestazione Automatica
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 26, 190, 18, 'FD')
