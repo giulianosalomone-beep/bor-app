@@ -5,6 +5,7 @@ from fpdf import FPDF
 import tempfile
 import datetime
 import os
+from PIL import Image
 
 def safe_str(testo):
     if not testo:
@@ -379,7 +380,15 @@ def calcola_assistenza_bor(nodi_totali):
         if nodi_totali <= limite:
             return tariffa
     return 800.0 + (nodi_totali - 48) * 15.0
+icona_bor = (
+    Image.open("logo_bor.png") if os.path.exists("logo_bor.png") else None
+)
 
+st.set_page_config(
+    page_title="BOR Security - Generatore Memorandum",
+    page_icon=icona_bor,
+    layout="wide",
+)
 st.set_page_config(page_title="BOR Security - Generatore Memorandum", page_icon="logo_bor.png", layout="wide")
 st.title("🛡️ BOR Security - Generatore Memorandum Commerciale")
 
