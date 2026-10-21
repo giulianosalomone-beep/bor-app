@@ -388,7 +388,9 @@ st.set_page_config(
     page_title="BOR Security - Generatore Memorandum",
     page_icon=icona_bor,
     layout="wide",)
-st.title("🛡️ BOR Security - Generatore Memorandum Commerciale")
+if os.path.exists("logo_bor.png"):
+    st.image("logo_bor.png", width=260)
+st.title("Generatore Memorandum Commerciale")
 
 if "pdf_pronto" not in st.session_state:
     st.session_state.pdf_pronto = False
