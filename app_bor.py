@@ -380,7 +380,7 @@ def calcola_assistenza_bor(nodi_totali):
             return tariffa
     return 800.0 + (nodi_totali - 48) * 15.0
 
-st.set_page_config(page_title="BOR Security - Generatore Memorandum", layout="wide")
+st.set_page_config(page_title="BOR Security - Generatore Memorandum", page_icon="logo_bor.png", layout="wide")
 st.title("🛡️ BOR Security - Generatore Memorandum Commerciale")
 
 if "pdf_pronto" not in st.session_state:
