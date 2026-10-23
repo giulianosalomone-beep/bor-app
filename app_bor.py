@@ -1,81 +1,63 @@
 import streamlit as st
-import pdfplumber
-import re
+import pandas as pd
 from fpdf import FPDF
 import tempfile
 import datetime
 import os
 
 # ==========================================
-# GESTIONE SICURA DEI TESTI PER IL PDF
+# GESTIONE CARICAMENTO CATALOGO (EXCEL)
+# ==========================================
+EXCEL_FILE = "Sviluppo Elenco Prodotti BOR con Codici - 2026 .xlsx"
+
+@st.cache_data
+def carica_cataloghi():
+    if os.path.exists(EXCEL_FILE):
+        df_prod = pd.read_excel(EXCEL_FILE, sheet_name='Videosorveglianza BOR')
+        df_serv = pd.read_excel(EXCEL_FILE, sheet_name='Servizi BOR')
+    elif os.path.exists("Sviluppo Elenco Prodotti BOR con Codici - 2026 -2.xlsx"):
+        df_prod = pd.read_excel("Sviluppo Elenco Prodotti BOR con Codici - 2026 -2.xlsx", sheet_name='Videosorveglianza BOR')
+        df_serv = pd.read_excel("Sviluppo Elenco Prodotti BOR con Codici - 2026 -2.xlsx", sheet_name='Servizi BOR')
+    else:
+        st.error(f"File catalogo '{EXCEL_FILE}' non trovato nella cartella dell'applicazione.")
+        st.stop()
+    
+    # Pulizia e riempimento valori nulli
+    df_prod['Tipo Nodo'] = df_prod['Tipo Nodo'].fillna('Passivo')
+    df_prod['Descrizione Articolo'] = df_prod['Descrizione Articolo'].fillna(df_prod['Nome Articolo'])
+    df_prod['Prezzo Unitario Listino'] = pd.to_numeric(df_prod['Prezzo Unitario Listino'], errors='coerce').fillna(0.0)
+    
+    df_serv['Prezzo Unitario Listino'] = pd.to_numeric(df_serv['Prezzo Unitario Listino'], errors='coerce').fillna(0.0)
+    return df_prod, df_serv
+
+df_prodotti, df_servizi = carica_cataloghi()
+
+# ==========================================
+# GESTIONE CARATTERI SICURI PER PDF
 # ==========================================
 def safe_str(testo):
-    if not testo:
+    if not testo or pd.isna(testo):
         return ""
     conversione = {
         'à': "a'", 'á': "a'", 'è': "e'", 'é': "e'", 'ì': "i'", 'í': "i'",
         'ò': "o'", 'ó': "o'", 'ù': "u'", 'ú': "u'", '€': "Euro", '’': "'",
         '“': '"', '”': '"', '–': '-', '\t': ' '
     }
+    testo = str(testo)
     for k, v in conversione.items():
         testo = testo.replace(k, v)
     return testo.encode('latin-1', 'replace').decode('latin-1')
 
-# ==========================================
-# CONFIGURAZIONE PARAMETRI E TARIFFE BOR
-# ==========================================
-TARIFFE_CORE = [(4, 100.0), (8, 150.0), (16, 200.0), (32, 300.0), (48, 400.0), (64, 500.0)]
-HELP_DESK_TIERS = [(8, 25.0), (16, 35.0), (32, 45.0), (48, 60.0), (64, 75.0)]
-COSTO_CHAT = 15.0
-
-MOLTIPLICATORI_PROFILO = {
-    "Su Inserimento (Zero Presenza)": 1.00,
-    "Fascia Oraria Notturna (22-06)": 1.05,
-    "Su Inserimento (Con Presenza)": 1.20,
-    "H24 Senza Presenza": 1.35,
-    "H24 Con Presenza": 1.50
-}
-ASSISTENZA_BOR_TIERS = [(4, 100.0), (8, 150.0), (16, 250.0), (32, 400.0), (48, 600.0)]
+# Calcolo quota ingegnerizzazione e collaudo BOR inclusa
+def calcola_assistenza_bor(nodi_totali):
+    tiers = [(4, 100.0), (8, 150.0), (16, 250.0), (32, 400.0), (48, 600.0)]
+    for limite, tariffa in tiers:
+        if nodi_totali <= limite:
+            return tariffa
+    return 800.0 + (nodi_totali - 48) * 15.0
 
 # ==========================================
-# MOTORE DI CATEGORIZZAZIONE ARTICOLI
-# ==========================================
-def categorizza_componente(codice, desc):
-    c_upper = str(codice).upper()
-    d_upper = str(desc).upper()
-    
-    if any(s in c_upper for s in ['AIVISION', 'LABSETUP', 'LIVETESTING', 'PROJECTMANAGEMENT', 'TECHNICALDESIGN', 'LIVE TESTING']):
-        return "Servizi Attivazione"
-    
-    if any(k in c_upper for k in ['COERCIZ', 'ARAP', 'GATECHECK', 'KITRCA', 'AU150', 'NEB', 'TEK', 'PRL']) or \
-       any(k in d_upper for k in ['GATE CHECK', 'NEBBIOGENO', 'ANTIRAPINA', 'COERCIZIONE', 'BIOMETRICO', 'RICARICA']):
-        return "Controllo Varchi e Dissuasione Attiva"
-        
-    if c_upper.startswith('TC') or 'VISIONSERVER' in c_upper or any(k in d_upper for k in ['NVR', 'TURRET', 'CAMERA', 'BULLET', 'DOME', 'OMNIVIEW']):
-        return "Videosorveglianza"
-        
-    if any(k in c_upper for k in ['DATARACK', 'AUDIOSERVER', 'MOBILELINK', 'RACK']) or \
-       any(k in d_upper for k in ['RACK', 'GUARDIAN SERVER', '4G', 'GESTIONE DA REMOTO']):
-        return "Rack e Kit per la Gestione da remoto"
-        
-    if any(k in c_upper for k in ['TWOWAYAUDIO', 'ACTIVESPEAKER', 'AUDIO', 'SPEAKER']) or \
-       any(k in d_upper for k in ['AUDIO', 'DIFFUSORE', 'DETERRENZA ATTIVA', 'VOCALE', 'ALTOPARLANTE']):
-        return "Audio e Diffusione"
-        
-    if 'FIREWALL' in c_upper or 'CYBER' in c_upper or 'FIREWALL' in d_upper or 'CYBERSECURITY' in d_upper:
-        return "Protezione Dati e Rete"
-        
-    if any(k in c_upper for k in ['POENETWORK', 'FIBERNETWORK', 'SWITCH', 'FIBRA']) or \
-       any(k in d_upper for k in ['SWITCH', 'POE', 'FIBRA']):
-        return "Infrastruttura di Rete"
-        
-    if any(k in c_upper for k in ['POWERBACKUP', 'UPS']) or any(k in d_upper for k in ['UPS', 'CONTINUITA', 'BLACKOUT']):
-        return "Protezione Blackout"
-        
-    return "Accessori"
-
-# ==========================================
-# CLASSE PDF MEMORANDUM BOR
+# CLASSE PDF MEMORANDUM BOR (2 PAGINE)
 # ==========================================
 class MemorandumBOR_PDF(FPDF):
     def __init__(self, cliente, agente, note_progetto):
@@ -123,14 +105,14 @@ class MemorandumBOR_PDF(FPDF):
         self.cell(0, 5.5, f'  {titolo}', 0, 1, 'L', True)
         self.ln(1.5)
 
-def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, cliente, agente, note, acconto_proposto):
+def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrello_hw, servizi_sel, canoni_calcolati):
     pdf = MemorandumBOR_PDF(cliente, agente, note)
     pdf.set_auto_page_break(auto=False, margin=10)
     
     # ------------------ PAGINA 1 ------------------
     pdf.add_page()
     
-    # Intestazione Automatica
+    # Riquadro Dati Intestazione
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 26, 190, 18, 'FD')
@@ -141,7 +123,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     pdf.cell(24, 3.5, 'Cliente / Ditta:', 0, 0)
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(82, 3.5, safe_str(cliente) if cliente else 'Come da distinta tecnica', 0, 0)
+    pdf.cell(82, 3.5, safe_str(cliente) if cliente else 'Destinatario Proposta', 0, 0)
     
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(30, 58, 138)
@@ -157,7 +139,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     pdf.set_font('Arial', '', 8)
     pdf.set_text_color(30, 41, 59)
     data_str = datetime.datetime.now().strftime("%d/%m/%Y")
-    pdf.cell(82, 3.5, f'{data_str} | Proposta Riservata', 0, 0)
+    pdf.cell(82, 3.5, f'{data_str} | Proposta Riservata (30 gg)', 0, 0)
 
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(30, 58, 138)
@@ -172,68 +154,68 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     pdf.cell(24, 3.5, 'Note Esecutive:', 0, 0)
     pdf.set_font('Arial', 'I', 7)
     pdf.set_text_color(71, 85, 105)
-    pdf.cell(0, 3.5, safe_str(note) if note else "Configurazione su misura in base all'analisi dei varchi e criticita'.", 0, 1)
+    pdf.cell(0, 3.5, safe_str(note) if note else "Configurazione su misura calcolata in base all'analisi dei varchi e criticita'.", 0, 1)
 
     pdf.set_y(47)
 
-    # 1. Investimento Hardware a Corpo
+    # 1. Investimento a Corpo
     pdf.box_sezione("1. DIMENSIONAMENTO INFRASTRUTTURA HARDWARE (A CORPO)")
-    col_w = 190 / len(dati_soluzioni)
-    start_x = 10
+    tot_hw = sum(item['totale'] for item in carrello_hw)
+    nodi_cam = sum(item['qt'] for item in carrello_hw if item['tipo_nodo'] == 'Camera')
+    nodi_totali = sum(item['qt'] for item in carrello_hw if item['tipo_nodo'] in ['Camera', 'Audio', 'MSB_Fog', 'MSB_Sos', 'MSB_Gate'])
+    assistenza = calcola_assistenza_bor(nodi_totali)
+    totale_finale = tot_hw + assistenza
+
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_draw_color(203, 213, 225)
+    pdf.rect(10, pdf.get_y(), 190, 24, 'FD')
+    
     start_y = pdf.get_y()
+    pdf.set_xy(12, start_y + 2)
+    pdf.set_font('Arial', 'B', 9)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(186, 4.5, "CONFIGURAZIONE IMPIANTO BOR - FORMULA GLOBALE CHIAVI IN MANO", 0, 1, 'C')
     
-    idx = 0
-    for nome_sol, sol in dati_soluzioni.items():
-        x_pos = start_x + (idx * col_w)
-        pdf.set_fill_color(241, 245, 249)
-        pdf.set_draw_color(203, 213, 225)
-        pdf.rect(x_pos, start_y, col_w - 2, 24, 'FD')
-        
-        pdf.set_xy(x_pos, start_y + 1.5)
-        pdf.set_font('Arial', 'B', 8.5)
-        pdf.set_text_color(30, 58, 138)
-        pdf.cell(col_w - 2, 4.5, f"[  ] OPZIONE {nome_sol}", 0, 1, 'C')
-        
-        pdf.set_xy(x_pos, start_y + 6.5)
-        pdf.set_font('Arial', 'B', 10.5)
-        pdf.set_text_color(15, 23, 42)
-        pdf.cell(col_w - 2, 6, f"Euro {sol['totale_finale']:,.2f}", 0, 1, 'C')
-        
-        pdf.set_xy(x_pos, start_y + 13.5)
-        pdf.set_font('Arial', '', 7)
-        pdf.set_text_color(71, 85, 105)
-        pdf.cell(col_w - 2, 3.5, f"Nodi Video: {sol['dati']['nodi_cam']} | Nodi Rete: {sol['dati']['nodi_totali']}", 0, 1, 'C')
-        pdf.set_x(x_pos)
-        pdf.cell(col_w - 2, 3.5, "+ Servizi Attivazione BOR Inclusi", 0, 1, 'C')
-        idx += 1
+    pdf.set_xy(12, start_y + 7.5)
+    pdf.set_font('Arial', 'B', 12)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(186, 6.5, f"Euro {totale_finale:,.2f} + IVA", 0, 1, 'C')
+    
+    pdf.set_xy(12, start_y + 15)
+    pdf.set_font('Arial', '', 7.5)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(186, 3.5, f"Dotazione attiva: {nodi_cam} Nodi Telecamera | {nodi_totali} Nodi Totali di Rete Presidiati", 0, 1, 'C')
+    pdf.set_xy(12, start_y + 18.5)
+    pdf.cell(186, 3.5, f"Quota Servizi Ingegnerizzazione e Laboratorio inclusa a corpo (Euro {assistenza:,.2f})", 0, 1, 'C')
 
-    pdf.set_y(start_y + 27)
+    pdf.set_y(start_y + 28)
 
-    # 2. Dettaglio Dotazione per Macrocategorie
+    # 2. Dettaglio per macrocategorie
     pdf.box_sezione("2. COMPONENTI HARDWARE SUDDIVISI PER MACROCATEGORIE")
-    sol_rif = list(dati_soluzioni.values())[-1]
-    macro_map = sol_rif["dati"]["per_categoria"]
-    
-    for cat_nome, prods in macro_map.items():
-        if cat_nome == "Servizi Attivazione" or not prods:
-            continue
+    # Raggruppa gli articoli per macrocategoria
+    categorie_map = {}
+    for item in carrello_hw:
+        cat = item['categoria']
+        categorie_map.setdefault(cat, []).append(item)
+
+    for cat_nome, prods in categorie_map.items():
         pdf.set_font('Arial', 'B', 7.5)
         pdf.set_text_color(30, 58, 138)
         pdf.cell(48, 3.8, f"- {cat_nome}:", 0, 0)
         
-        dettagli_str = ", ".join([f"{p['qt']}x {p['desc']}" for p in prods])
+        dettagli_str = ", ".join([f"{p['qt']}x {p['nome']}" for p in prods])
         pdf.set_font('Arial', '', 7)
         pdf.set_text_color(51, 65, 85)
         pdf.multi_cell(0, 3.8, safe_str(dettagli_str))
 
     pdf.ln(2)
 
-    # 3. Servizi BOR per l'Attivazione
+    # 3. Servizi di Ingegnerizzazione Inclusi
     pdf.box_sezione("3. SERVIZI BOR PER L'ATTIVAZIONE DEL SISTEMA (INCLUSI)")
     servizi_elenco = [
         ("Progettazione Tecnica Esecutiva", "Analisi vulnerabilita', coni visivi e piano planimetrico di copertura."),
-        ("Pre-Configurazione in Laboratorio", "Assemblaggio a banco, cablaggio rack e stress-test dispositivi pre-installazione."),
-        ("Configurazione AI & Analisi Neurale", "Tracciamento perimetri virtuali a bordo camera per abbattimento totale falsi allarmi."),
+        ("Pre-Configurazione in Laboratorio", "Assemblaggio a banco, cablaggio rack e stress-test apparati pre-posa."),
+        ("Configurazione AI & Analisi Neurale", "Tracciamento perimetri virtuali avanzati a bordo camera per abbattimento falsi allarmi."),
         ("Direzione Lavori e Coordinamento", "Fornitura schemi esecutivi e supervisione costante maestranze sul cantiere."),
         ("Collaudo On-Site & Allaccio Remoto", "Orientamento ottiche congiunto con tecnici remoti e allaccio crittografato alla Centrale.")
     ]
@@ -257,19 +239,17 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     pdf.cell(0, 3.2, "POLITICA DI POSA IN OPERA FISICA:", 0, 1)
     pdf.set_font('Arial', '', 6.5)
     pdf.set_text_color(69, 10, 10)
-    pdf.multi_cell(186, 3, "La stesura cavi e posa fisica e' esclusa e puo' essere affidata all'elettricista di fiducia del cliente (guidato dalla nostra Direzione Lavori) oppure preventivata separatamente con Installatore Partner Certificato BOR.")
+    pdf.multi_cell(186, 3, "La stesura cavi e posa fisica puo' essere affidata all'elettricista di fiducia del cliente (guidato dalla nostra Direzione Lavori) oppure preventivata a parte richiedendo un Installatore Partner Certificato BOR.")
 
     # ------------------ PAGINA 2 ------------------
     pdf.add_page()
 
     # 4. Canoni Telepresenza
-    pdf.box_sezione("4. CANONE MENSILE TELEPRESENZA E GUARDIANIA VIRTUALE")
+    pdf.box_sezione("4. PROSPETTO CANONI MENSILI TELEPRESENZA E GUARDIANIA VIRTUALE")
     pdf.set_font('Arial', '', 7.5)
     pdf.set_text_color(51, 65, 85)
-    pdf.multi_cell(0, 3.5, "Il servizio comprende: Telepresenza attiva su piattaforma BOR, Help Desk tecnologico costante da remoto e Canale Chat Bidirezionale prioritario con i Guardiani Virtuali.")
+    pdf.multi_cell(0, 3.5, "Il canone include: Telepresenza su piattaforma BOR, Help Desk tecnologico costante da remoto e Chat Bidirezionale prioritaria con i Guardiani Virtuali.")
     pdf.ln(2)
-
-    n_cam_rif = sol_rif["dati"]["nodi_cam"]
 
     pdf.set_font('Arial', 'B', 8)
     pdf.set_fill_color(241, 245, 249)
@@ -288,8 +268,7 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     }
 
     pdf.set_font('Arial', '', 7.5)
-    for nome_prof, k_prof in MOLTIPLICATORI_PROFILO.items():
-        canone = calcola_canone(n_cam_rif, k_prof, k_ambiente)
+    for nome_prof, canone in canoni_calcolati.items():
         pdf.cell(15, 5.5, '[   ]', 1, 0, 'C')
         pdf.set_font('Arial', 'B', 7.5)
         pdf.set_text_color(30, 41, 59)
@@ -303,18 +282,19 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
 
     pdf.ln(3)
 
-    if msb_rilevati:
-        pdf.box_sezione("5. UPGRADE SERVIZI PERSONALIZZATI (MSB)")
+    # 5. Servizi Mensili Aggiuntivi Selezionati
+    if servizi_sel:
+        pdf.box_sezione("5. UPGRADE SERVIZI MENSILI PERSONALIZZATI (MSB)")
         pdf.set_font('Arial', '', 7.5)
         pdf.set_text_color(51, 65, 85)
-        for msb_nome, msb_prezzo in msb_rilevati:
-            pdf.cell(15, 5, '[   ]', 0, 0, 'C')
+        for s in servizi_sel:
+            pdf.cell(15, 5, '[ X ]', 0, 0, 'C')
             pdf.set_font('Arial', 'B', 8)
             pdf.set_text_color(30, 41, 59)
-            pdf.cell(115, 5, safe_str(msb_nome), 0, 0, 'L')
+            pdf.cell(115, 5, safe_str(s['nome']), 0, 0, 'L')
             pdf.set_font('Arial', 'B', 8)
             pdf.set_text_color(30, 58, 138)
-            pdf.cell(0, 5, f'+ Euro {msb_prezzo:,.2f} / mese', 0, 1, 'R')
+            pdf.cell(0, 5, f'+ Euro {s["prezzo"]:,.2f} / mese', 0, 1, 'R')
         pdf.ln(2)
 
     # 6. Clausole, Garanzie e Firme
@@ -330,10 +310,10 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     pdf.cell(0, 3.5, "CLAUSOLA DI BLOCCO BUDGET E RECESSO GARANTITO (20%):", 0, 1)
     pdf.set_font('Arial', '', 7)
     pdf.set_text_color(51, 65, 85)
-    acconto_val = safe_str(acconto_proposto) if acconto_proposto else "_______________"
+    acconto_val = safe_str(acconto) if acconto else "_______________"
     testo_clausola = (
         f"A conferma delle condizioni esposte, viene versato un acconto di Euro {acconto_val} a titolo di prenotazione "
-        "slot e predisposizione centrale. Qualora il progetto finale dovesse comportare una variazione del budget "
+        "slot e predisposizione centrale. Qualora il progetto esecutivo finale dovesse comportare una variazione del budget "
         "hardware superiore al 20%, il Cliente avra' diritto al recesso immediato con rimborso integrale dell'acconto."
     )
     pdf.multi_cell(186, 3.2, testo_clausola)
@@ -371,214 +351,167 @@ def genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_rilevati, 
     return bytes_out
 
 # ==========================================
-# PARSER PDF GOOSE
+# INTERFACCIA UTENTE STREAMLIT (CPQ NATIVO)
 # ==========================================
-def analizza_pdf_goose(file_pdf):
-    articoli = []
-    totale_importo_hardware = 0.0
-    nodi_cam = 0
-    nodi_totali = 0
-    trigger_msb = set()
-    cliente_estratto = ""
-    per_categoria = {
-        "Videosorveglianza": [],
-        "Rack e Kit per la Gestione da remoto": [],
-        "Audio e Diffusione": [],
-        "Infrastruttura di Rete": [],
-        "Protezione Dati e Rete": [],
-        "Protezione Blackout": [],
-        "Controllo Varchi e Dissuasione Attiva": [],
-        "Accessori": [],
-        "Servizi Attivazione": []
-    }
-
-    try:
-        with pdfplumber.open(file_pdf) as pdf:
-            for idx_pag, pagina in enumerate(pdf.pages):
-                testo = pagina.extract_text()
-                if not testo:
-                    continue
-                
-                if idx_pag == 0 and not cliente_estratto:
-                    match_cl = re.search(r'INTESTATO\s+A\s*[\n\r]+([^\n\r]+)', testo, re.IGNORECASE)
-                    if match_cl:
-                        candidato = match_cl.group(1).strip()
-                        if not candidato.startswith(('TEL', 'CODICE', 'EMAIL', 'IBAN')):
-                            cliente_estratto = candidato
-
-                lines = testo.split('\n')
-                curr_code = None
-                curr_desc = []
-
-                for riga in lines:
-                    riga_s = riga.strip()
-                    if not riga_s:
-                        continue
-
-                    m_num = re.search(r'NR\s+(\d+)\s+([\d\.,\s]+?)(?:022|\d{3})?$', riga_s)
-                    if m_num and curr_code:
-                        qt = int(m_num.group(1))
-                        parts = m_num.group(2).strip().split()
-                        imp = float(parts[-1].replace('.', '').replace(',', '.')) if parts else 0.0
-                        full_desc = " ".join(curr_desc).replace('\t', ' ').strip()
-                        
-                        cat = categorizza_componente(curr_code, full_desc)
-                        per_categoria[cat].append({"codice": curr_code, "desc": full_desc, "qt": qt})
-
-                        if cat != "Servizi Attivazione":
-                            articoli.append({"codice": curr_code, "descrizione": full_desc, "qt": qt, "importo": imp, "cat": cat})
-                            totale_importo_hardware += imp
-
-                            if cat == "Videosorveglianza":
-                                if not 'VISIONSERVER' in curr_code.upper():
-                                    nodi_cam += qt
-                                nodi_totali += qt
-                            elif cat in ["Audio e Diffusione", "Controllo Varchi e Dissuasione Attiva"]:
-                                nodi_totali += qt
-
-                            if 'COERCIZ' in curr_code or 'T-ARAP' in curr_code:
-                                trigger_msb.add(("MSB Antirapina H24", 69.0))
-                            if 'KITRCA' in curr_code or 'GATECHECK' in curr_code:
-                                trigger_msb.add(("MSB Controllo Varchi Gate Check", 29.0))
-                            if 'AU' in curr_code or 'NEB' in curr_code:
-                                trigger_msb.add(("MSB Attivazione Nebbiogeni", 39.0))
-
-                        curr_code = None
-                        curr_desc = []
-                        continue
-
-                    m_code = re.match(r'^([A-Z0-9_\-\+]{3,28})\s+(.*)$', riga_s)
-                    ignora_testata = ['OFFERTA', 'TIPO', 'CODICE', 'MANDANTE', 'MODALITA', 'INTESTATO', 'BANCA', 'EURO', 'VALUTA', 'TOTALE', 'SPESE', 'FIRMA', 'SISTEMA', 'IL', 'PER']
-                    if m_code and not any(m_code.group(1).upper().startswith(kw) for kw in ignora_testata):
-                        curr_code = m_code.group(1)
-                        curr_desc = [m_code.group(2)]
-                    elif curr_code:
-                        curr_desc.append(riga_s)
-                        
-    except Exception:
-        pass
-
-    return {
-        "articoli": articoli,
-        "totale_hw": totale_importo_hardware,
-        "nodi_cam": nodi_cam,
-        "nodi_totali": nodi_totali,
-        "trigger_msb": trigger_msb,
-        "cliente": cliente_estratto,
-        "per_categoria": per_categoria
-    }
-
-def calcola_canone(nodi_cam, k_profilo, k_ambiente):
-    quota_tele = 500.0 + ((nodi_cam - 64) // 16) * 100.0 if nodi_cam > 64 else 100.0
-    for limite, tariffa in TARIFFE_CORE:
-        if nodi_cam <= limite:
-            quota_tele = tariffa
-            break
-
-    quota_hd = 75.0
-    for limite, tariffa in HELP_DESK_TIERS:
-        if nodi_cam <= limite:
-            quota_hd = tariffa
-            break
-
-    c_core = quota_tele + quota_hd + COSTO_CHAT
-    return round(c_core * k_profilo * k_ambiente, 2)
-
-def calcola_assistenza_bor(nodi_totali):
-    for limite, tariffa in ASSISTENZA_BOR_TIERS:
-        if nodi_totali <= limite:
-            return tariffa
-    return 800.0 + (nodi_totali - 48) * 15.0
-
-# ==========================================
-# INTERFACCIA STREAMLIT
-# ==========================================
-st.set_page_config(page_title="BOR Security - Generatore Memorandum", page_icon="logo_bor.png" if os.path.exists("logo_bor.png") else None, layout="wide")
+st.set_page_config(page_title="BOR CPQ - Preventivatore Ufficiale", page_icon="logo_bor.png" if os.path.exists("logo_bor.png") else "🛡️", layout="wide")
 
 if os.path.exists("logo_bor.png"):
     st.image("logo_bor.png", width=220)
-st.title("Generatore Memorandum Commerciale")
+st.title("Configuratore Preventivi & Memorandum BOR")
 
-col_sx, col_dx = st.columns([1, 2])
+# Inizializzazione sessione carrello
+if "carrello_hw" not in st.session_state:
+    st.session_state.carrello_hw = []
 
-with col_sx:
+col_dati, col_cfg = st.columns([1, 2])
+
+with col_dati:
     st.subheader("1. Dati Gestionali Offerta")
-    agente = st.text_input("Security Manager (Agente)", placeholder="Es. Giuliano Salomone")
+    cliente = st.text_input("Ragione Sociale / Cliente", placeholder="Es. Ditta Rossi S.r.l.")
+    agente = st.text_input("Security Manager (Progettista)", placeholder="Es. Giuliano Salomone")
     acconto = st.text_input("Acconto Proposto (Euro)", placeholder="Es. 1.500,00")
-    note = st.text_area("Note e Personalizzazioni Esecutive", placeholder="Es. Riconfigurazione varchi perimetrali...")
+    note = st.text_area("Note Progettuali / Specifiche Varchi", placeholder="Es. Copertura perimetrale esterna e varco merci...")
 
-    st.subheader("2. Parametri Tecnici e Rischio")
+    st.subheader("2. Parametri di Rischio")
     tipo_contratto = st.radio("Tipologia Contratto", ["Business (Garanzia 12 mesi)", "Residenziale (Garanzia 24 mesi)"])
     
     st.markdown("**Fattori di Complessita' Ambientale:**")
     f_traffico = st.checkbox("Traffico continuo / Movimenti frequenti (+5%)")
     f_fornitori = st.checkbox("Transito frequente fornitori / Accessi merci (+10%)")
     f_multinucleo = st.checkbox("Piu' nuclei familiari / Sede condivisa (+15%)")
-    
     k_ambiente = 1.0 + (0.05 if f_traffico else 0) + (0.10 if f_fornitori else 0) + (0.15 if f_multinucleo else 0)
 
-with col_dx:
-    st.subheader("3. Caricamento Distinte Tecniche Goose")
-    st.info("Trascina qui i PDF esportati da Goose. I componenti verranno categorizzati in automatico e l'intestatario estratto dal documento.")
-    pdf_base = st.file_uploader("Preventivo Goose - Soluzione BASE", type=["pdf"])
-    pdf_media = st.file_uploader("Preventivo Goose - Soluzione MEDIA", type=["pdf"])
-    pdf_full = st.file_uploader("Preventivo Goose - Soluzione FULL", type=["pdf"])
+with col_cfg:
+    st.subheader("3. Selezione Componenti Hardware")
+    
+    macro_disponibili = sorted(df_prodotti['Macrocategoria'].unique())
+    c1, c2, c3, c4 = st.columns([1.5, 2.5, 0.8, 1])
+    
+    with c1:
+        cat_sel = st.selectbox("Macrocategoria", macro_disponibili)
+    with c2:
+        prodotti_filtrati = df_prodotti[df_prodotti['Macrocategoria'] == cat_sel]
+        prod_sel = st.selectbox("Articolo", prodotti_filtrati['Nome Articolo'].tolist())
+    with c3:
+        qt_sel = st.number_input("Qt.", min_value=1, value=1, step=1)
+    with c4:
+        st.write("")
+        st.write("")
+        if st.button("➕ Aggiungi", use_container_width=True):
+            riga_prod = prodotti_filtrati[prodotti_filtrati['Nome Articolo'] == prod_sel].iloc[0]
+            st.session_state.carrello_hw.append({
+                "codice": riga_prod['Codice Prodotto'],
+                "nome": riga_prod['Nome Articolo'],
+                "categoria": riga_prod['Macrocategoria'],
+                "prezzo_unit": float(riga_prod['Prezzo Unitario Listino']),
+                "qt": int(qt_sel),
+                "totale": float(riga_prod['Prezzo Unitario Listino']) * int(qt_sel),
+                "tipo_nodo": str(riga_prod['Tipo Nodo'])
+            })
+            st.rerun()
 
-    file_caricati = [("BASE", pdf_base), ("MEDIA", pdf_media), ("FULL", pdf_full)]
-    file_validi = [f for f in file_caricati if f[1] is not None]
+    # Visualizzazione tabella carrello
+    if st.session_state.carrello_hw:
+        df_carrello = pd.DataFrame(st.session_state.carrello_hw)
+        st.dataframe(
+            df_carrello[['categoria', 'nome', 'qt', 'prezzo_unit', 'totale']],
+            column_config={
+                "categoria": "Macrocategoria",
+                "nome": "Componente",
+                "qt": "Quantità",
+                "prezzo_unit": st.column_config.NumberColumn("Prezzo Unit. (€)", format="%.2f €"),
+                "totale": st.column_config.NumberColumn("Totale (€)", format="%.2f €")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        if st.button("🗑️ Svuota Carrello Hardware"):
+            st.session_state.carrello_hw = []
+            st.rerun()
+    else:
+        st.info("Nessun articolo inserito. Seleziona una categoria e premi '➕ Aggiungi'.")
 
-    st.markdown("---")
-
-    # PULSANTE DI ELABORAZIONE UNICO
-    if st.button("🚀 ELABORA E SCARICA MEMORANDUM PDF", type="primary", use_container_width=True):
-        if not file_validi:
-            st.warning("⚠️ Carica almeno un file PDF di Goose prima di procedere.")
-        else:
-            dati_soluzioni = {}
-            msb_globali = set()
-            cliente_finale = ""
-
-            for nome, file in file_validi:
-                res = analizza_pdf_goose(file)
-                assistenza = calcola_assistenza_bor(res["nodi_totali"])
-                totale_finale = res["totale_hw"] + assistenza
-                dati_soluzioni[nome] = {"dati": res, "assistenza": assistenza, "totale_finale": totale_finale}
-                msb_globali.update(res["trigger_msb"])
-                if not cliente_finale and res["cliente"]:
-                    cliente_finale = res["cliente"]
-
-            nome_file_pulito = f"Memorandum_BOR_{cliente_finale.strip().replace(' ', '_') if cliente_finale else 'Bozza'}.pdf"
-            pdf_bytes = genera_pdf_finale(dati_soluzioni, k_ambiente, tipo_contratto, msb_globali, cliente_finale, agente, note, acconto)
+    st.subheader("4. Canoni e Servizi di Centrale")
+    
+    # Rilevamento automatico parametri licenza
+    nodi_cam = sum(item['qt'] for item in st.session_state.carrello_hw if item['tipo_nodo'] == 'Camera')
+    
+    # Calcolo Canoni Telepresenza
+    tariffe_core = [(4, 100.0), (8, 150.0), (16, 200.0), (32, 300.0), (48, 400.0), (64, 500.0)]
+    quota_tele = 500.0 + ((nodi_cam - 64) // 16) * 100.0 if nodi_cam > 64 else 100.0
+    for lim, tar in tariffe_core:
+        if nodi_cam <= lim:
+            quota_tele = tar
+            break
             
-            st.success(f"🎉 **Memorandum pronto per: {cliente_finale or 'Cliente Rilevato'}**")
-            st.download_button(
-                label="📥 CLICCA QUI PER SCARICARE IL PDF UFFICIALE (2 PAGINE)",
-                data=pdf_bytes,
-                file_name=nome_file_pulito,
-                mime="application/pdf",
-                type="primary",
-                use_container_width=True
-            )
+    help_desk_tiers = [(8, 25.0), (16, 35.0), (32, 45.0), (48, 60.0), (64, 75.0)]
+    quota_hd = 75.0
+    for lim, tar in help_desk_tiers:
+        if nodi_cam <= lim:
+            quota_hd = tar
+            break
             
-            st.markdown("---")
-            st.header("📋 SINTESI ECONOMICA A CORPO")
-            cols = st.columns(len(dati_soluzioni))
-            idx = 0
-            for nome, sol in dati_soluzioni.items():
-                with cols[idx]:
-                    st.subheader(f"Opzione {nome}")
-                    st.metric("Investimento Infrastruttura", f"Euro {sol['totale_finale']:,.2f} + IVA")
-                    st.write(f"- Nodi Video Rilevati: **{sol['dati']['nodi_cam']}**")
-                    st.write(f"- Quota Ingegnerizzazione Inclusa: Euro {sol['assistenza']:,.2f}")
-                idx += 1
+    costo_chat = 15.0
+    base_core = quota_tele + quota_hd + costo_chat
 
-            st.markdown("---")
-            st.header("🔍 COMPONENTI RAGGRUPPATI PER MACROCATEGORIA")
-            for nome_opz, sol_obj in dati_soluzioni.items():
-                with st.expander(f"Visualizza distinta categorizzata: Opzione {nome_opz}", expanded=True):
-                    cat_dict = sol_obj["dati"]["per_categoria"]
-                    for c_name, p_list in cat_dict.items():
-                        if c_name != "Servizi Attivazione" and p_list:
-                            st.markdown(f"**{c_name}:**")
-                            for p in p_list:
-                                st.write(f"- {p['qt']}x {p['desc']}")
+    moltiplicatori = {
+        "Su Inserimento (Zero Presenza)": 1.00,
+        "Fascia Oraria Notturna (22-06)": 1.05,
+        "Su Inserimento (Con Presenza)": 1.20,
+        "H24 Senza Presenza": 1.35,
+        "H24 Con Presenza": 1.50
+    }
+    canoni_calcolati = {nome: round(base_core * mult * k_ambiente, 2) for nome, mult in moltiplicatori.items()}
+
+    st.write(f"Nodi Telecamera Rilevati: **{nodi_cam}** | Canone Base di Riferimento: **Euro {canoni_calcolati['Su Inserimento (Zero Presenza)']} / mese**")
+
+    # Selezione Servizi Mensili Integrativi (MSB)
+    servizi_mensili_disponibili = df_servizi[df_servizi['Macrocategoria'].str.contains('Mensili|Canoni', na=False)]
+    servizi_selezionati = []
+    
+    cols_serv = st.columns(2)
+    idx_s = 0
+    for _, s_row in servizi_mensili_disponibili.iterrows():
+        with cols_serv[idx_s % 2]:
+            attivo = st.checkbox(f"{s_row['Nome Articolo']} (+{s_row['Prezzo Unitario Listino']:.2f} €/mese)")
+            if attivo:
+                servizi_selezionati.append({
+                    "codice": s_row['Codice Prodotto'],
+                    "nome": s_row['Nome Articolo'],
+                    "prezzo": float(s_row['Prezzo Unitario Listino'])
+                })
+        idx_s += 1
+
+# ==========================================
+# RIEPILOGO ECONOMICO & GENERAZIONE PDF
+# ==========================================
+st.markdown("---")
+st.header("5. Sintesi Economica Globale e Download Offerta")
+
+if st.session_state.carrello_hw:
+    tot_hw = sum(item['totale'] for item in st.session_state.carrello_hw)
+    nodi_tot = sum(item['qt'] for item in st.session_state.carrello_hw if item['tipo_nodo'] in ['Camera', 'Audio', 'MSB_Fog', 'MSB_Sos', 'MSB_Gate'])
+    assistenza = calcola_assistenza_bor(nodi_tot)
+    totale_finale = tot_hw + assistenza
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Totale Hardware Listino", f"Euro {tot_hw:,.2f}")
+    m2.metric("Ingegnerizzazione Inclusa", f"Euro {assistenza:,.2f}")
+    m3.metric("Totale Offerta a Corpo", f"Euro {totale_finale:,.2f} + IVA")
+    m4.metric("Nodi Totali Presidiati", f"{nodi_tot} Nodi")
+
+    nome_file = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Proposta'}.pdf"
+    
+    # Genera i bytes del PDF
+    pdf_bytes = genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, st.session_state.carrello_hw, servizi_selezionati, canoni_calcolati)
+
+    st.download_button(
+        label="📥 SCARICA MEMORANDUM PDF UFFICIALE BOR (2 PAGINE)",
+        data=pdf_bytes,
+        file_name=nome_file,
+        mime="application/pdf",
+        type="primary",
+        use_container_width=True
+    )
+else:
+    st.warning("Aggiungi almeno un componente hardware al carrello per poter calcolare e scaricare il Memorandum.")
