@@ -5,32 +5,138 @@ import datetime
 import os
 
 # ==========================================
-# CARICAMENTO DATI ULTRA-RAPIDO IN CACHE
+# 1. CATALOGO NATIVO IN MEMORIA (92 PRODOTTI + 26 SERVIZI)
 # ==========================================
-def trova_file_excel_locale():
-    candidati = [f for f in os.listdir('.') if f.endswith('.xlsx') and not f.startswith('~$')]
-    candidati_bor = [f for f in candidati if any(k in f for k in ['BOR', 'Sviluppo', 'Prodotti'])]
-    if candidati_bor:
-        return candidati_bor[0]
-    if candidati:
-        return candidati[0]
-    return None
+CATALOGO_HARDWARE = [
+    ("BOR-VisionServer4", "NVR 4 Canali con Hard Disk 2TB", "Videosorveglianza", 790.0, "NVR"),
+    ("BOR-VisionServer16", "NVR 16 Canali con Hard Disk 2TB", "Videosorveglianza", 1190.0, "NVR"),
+    ("BOR-TC15LE-28-H", "Telecamera Turret 5MP 2.8mm", "Videosorveglianza", 239.0, "Camera"),
+    ("BOR-TC25LB-2812-H", "Telecamera Bullet 5MP Varifocal 2.8 to 12mm", "Videosorveglianza", 249.0, "Camera"),
+    ("BOR-TC35LB-2812-H", "Telecamera Turret 5MP Varifocal 2.8 to 12mm", "Videosorveglianza", 249.0, "Camera"),
+    ("BOR-TC5SB-16KM-10", "Telecamera Turret 5MP OmniView 180°", "Videosorveglianza", 269.0, "Camera"),
+    ("BOR-TC5EB-12KM-10", "Telecamera Bullet 5MP Varifocal 5 to 60mm", "Videosorveglianza", 575.0, "Camera"),
+    ("BOR-TC4SB-28-I0", "Mini Dome 4MP da Interni", "Videosorveglianza", 249.0, "Camera"),
+    ("BOR-TCPKC-Z28", "Telecamera Bullet Lettura Targa", "Videosorveglianza", 959.0, "Camera"),
+    ("BOR-TTB-3MM", "Telecamera Bullet Termica Bi-Spectrum 3mm", "Videosorveglianza", 759.0, "Camera"),
+    ("BOR-TTB-7MM", "Telecamera Bullet Termica Bi-Spectrum 7mm", "Videosorveglianza", 890.0, "Camera"),
+    ("BOR-PTZ-4X", "Telecamera PTZ 4X da Esterni", "Videosorveglianza", 399.0, "Camera"),
+    ("BOR-PTZ-25X", "Telecamera PTZ 25X da Esterni", "Videosorveglianza", 890.0, "Camera"),
+    ("BOR-HardDisk-4TB", "Hard Disk di Espansione 4TB", "Videosorveglianza", 145.0, "Passivo"),
+    ("BOR-LicenzePack", "Licenza PRO AI per Analisi Video Avanzata", "Licenze Analisi Video", 1017.0, "Passivo"),
+    ("BOR-DataRack9", "Rack 9\" Pre-Assemblato con Dispositivi BOR", "Armadio Rack", 623.0, "Passivo"),
+    ("BOR-DataRack12", "Rack 12\" Pre-Assemblato con Dispositivi BOR", "Armadio Rack", 739.0, "Passivo"),
+    ("BOR-DataRack15", "Rack 15\" Pre-Assemblato con Dispositivi BOR", "Armadio Rack", 815.0, "Passivo"),
+    ("BOR-DataRack18", "Rack 18\" Pre-Assemblato con Dispositivi BOR", "Armadio Rack", 850.0, "Passivo"),
+    ("BOR-DataRack22", "Rack 22\" Pre-Assemblato con Dispositivi BOR", "Armadio Rack", 1055.0, "Passivo"),
+    ("BOR-Ripiano-Rack", "Ripiano Fisso per Armadio Rack", "Armadio Rack", 28.0, "Passivo"),
+    ("BOR-Patch-Panel", "Patch Panel 24 Porte Cat.6", "Armadio Rack", 45.0, "Passivo"),
+    ("BOR-Passacavi-Rack", "Pannello Passacavi 1U con Spazzola", "Armadio Rack", 18.0, "Passivo"),
+    ("BOR-Multipresa-Rack", "Multipresa Rack 8 Posti Schuko con Interruttore", "Armadio Rack", 42.0, "Passivo"),
+    ("BOR-Guida-Rack", "Kit Guide Laterali di Supporto Apparati", "Armadio Rack", 35.0, "Passivo"),
+    ("BOR-Termostato-Rack", "Unita di Ventilazione a Tetto con Termostato", "Armadio Rack", 85.0, "Passivo"),
+    ("BOR-Cavi-Patch-Kit", "Kit 10 Cavi Patch Cat.6 UTP 0.5m", "Armadio Rack", 22.0, "Passivo"),
+    ("BOR-Serratura-Rack", "Serratura di Sicurezza con Chiave Cifrata", "Armadio Rack", 25.0, "Passivo"),
+    ("BOR-Luce-LED-Rack", "Barra LED 1U Magnetica per Interno Rack", "Armadio Rack", 38.0, "Passivo"),
+    ("BOR-Kit-Gabbie", "Set 50 Viti e Dadi a Gabbia M6 per Rack", "Armadio Rack", 15.0, "Passivo"),
+    ("BOR-Ruote-Rack", "Kit 4 Ruote Piroettanti con Freno per Rack", "Armadio Rack", 48.0, "Passivo"),
+    ("BOR-Zoccolo-Rack", "Zoccolo di Rialzo Base Rack da Pavimento", "Armadio Rack", 65.0, "Passivo"),
+    ("BOR-AudioServer", "Kit Audio Amplificatore da Rack", "Kit per la Gestione da remoto", 647.0, "Passivo"),
+    ("BOR-MobileLink", "Modulo di Comunicazione Ridondante 4G", "Kit per la Gestione da remoto", 213.0, "Passivo"),
+    ("BOR-CyberFirewall", "Firewall Balancer Cybersecurity", "Protezione Rete & Blackout", 354.0, "Passivo"),
+    ("BOR-PowerBackup20", "Gruppo di Continuita Online 2000VA", "Protezione Rete & Blackout", 600.0, "Passivo"),
+    ("BOR-PowerBackup30", "Gruppo di Continuita Online 3000VA", "Protezione Rete & Blackout", 600.0, "Passivo"),
+    ("BOR-PowBack30/27", "Gruppo di Continuita Online 3000VA/2700W", "Protezione Rete & Blackout", 1093.0, "Passivo"),
+    ("BOR-PowPack30/27", "Pacco Batterie per UPS Online", "Protezione Rete & Blackout", 240.0, "Passivo"),
+    ("BOR-SmartControl", "Controller con Tags & App My BOR", "Controller & App", 115.0, "Passivo"),
+    ("BOR-SmartControlPlus", "Controller Aggiuntivo", "Controller & App", 230.0, "Passivo"),
+    ("BOR-TwoWayAudio-In", "Terminale Audio Bidirezionale da Interni", "Audio Diffusione e Deterrenza", 375.0, "Audio"),
+    ("BOR-TwoWayAudio-Out", "Terminale Audio Bidirezionale da Esterni", "Audio Diffusione e Deterrenza", 356.0, "Audio"),
+    ("BOR-T-Audio10W", "Diffusore Audio a Tubo 10W", "Audio Diffusione e Deterrenza", 65.0, "Audio"),
+    ("BOR-P-Audio10W", "Diffusore Audio a Parete 5/10W", "Audio Diffusione e Deterrenza", 65.0, "Audio"),
+    ("BOR-D-Audio506", "Diffusore Audio 506", "Audio Diffusione e Deterrenza", 65.0, "Audio"),
+    ("BOR-T-Audio30W", "Tromba Audio di Potenza 30W IP66", "Audio Diffusione e Deterrenza", 95.0, "Audio"),
+    ("BOR-PoeNetwork", "Switch POE Collegamento Dati", "Infrastruttura di Rete", 70.0, "Passivo"),
+    ("BOR-FiberNetwork", "Switch per Collegamenti in Fibra", "Infrastruttura di Rete", 297.0, "Passivo"),
+    ("BOR-ModuliSFP", "Moduli per la Fibra", "Infrastruttura di Rete", 32.0, "Passivo"),
+    ("BOR-C-MediaConv-F", "Coppia di Media Converter con Moduli SFP", "Infrastruttura di Rete", 116.0, "Passivo"),
+    ("BOR-1-MediaConv-F", "Media Converter con Modulo SFP", "Infrastruttura di Rete", 58.0, "Passivo"),
+    ("BOR-JB-I-15", "Scatola di Giunzione per Telecamera Turret", "Accessori", 12.0, "Passivo"),
+    ("BOR-JB-G-4SB", "Scatola di Giunzione per Telecamera Turret", "Accessori", 12.0, "Passivo"),
+    ("BOR-JB-G-35", "Scatola di Giunzione per Telecamera Turret", "Accessori", 13.0, "Passivo"),
+    ("BOR-JB-G-25", "Scatola di Giunzione per Telecamera Bullet", "Accessori", 22.0, "Passivo"),
+    ("BOR-SP-W-15", "Staffa da Parete per Telecamera", "Accessori", 22.0, "Passivo"),
+    ("BOR-SP-W-25", "Staffa da Parete per Telecamera", "Accessori", 22.0, "Passivo"),
+    ("BOR-SP-C-15", "Staffa da Soffitto Telescopica", "Accessori", 29.0, "Passivo"),
+    ("BOR-SP-P-15", "Adattatore Palo per Telecamera", "Accessori", 19.0, "Passivo"),
+    ("BOR-SP-A-15", "Adattatore Angolo per Telecamera", "Accessori", 22.0, "Passivo"),
+    ("BOR-MountingKit", "Kit Accessori e Box di Giunzione", "Accessori", 15.0, "Passivo"),
+    ("BOR-WarningSign", "Cartello Monitore Dissuasione BOR", "Accessori", 0.0, "Passivo"),
+    ("BOR-Alim-12V", "Alimentatore Stabilizzato 12V 2A", "Accessori", 18.0, "Passivo"),
+    ("BOR-GateCheckMaster", "Modulo Gate Check per Varco Primario", "Controllo Varchi", 530.0, "MSB_Gate"),
+    ("BOR-GateCheckPlus", "Sensore Gate Check per Varchi Aggiuntivi", "Controllo Varchi", 90.0, "MSB_Gate"),
+    ("BOR-Coerc1-1", "Kit Anti Rapina 1 Lettore 1 Varco", "Sistemi Antirapina", 1480.0, "MSB_Sos"),
+    ("BOR-Coerc2-1", "Kit Anti Rapina 2 Lettori 1 Varco", "Sistemi Antirapina", 1730.0, "MSB_Sos"),
+    ("BOR-Coerc2-2", "Kit Anti rapina 2 Lettori 2 Varchi", "Sistemi Antirapina", 1900.0, "MSB_Sos"),
+    ("BOR-Coerc4-2", "Kit Anti Rapina 4 Lettori 2 Varchi", "Sistemi Antirapina", 2150.0, "MSB_Sos"),
+    ("BOR-C-Coercz", "Unita Centrale BOR per Servizi di Sicurezza", "Sistemi Antirapina", 790.0, "MSB_Sos"),
+    ("BOR-T-Arap", "Telecomando Antirapina T-ARAP", "Sistemi Antirapina", 48.0, "MSB_Sos"),
+    ("BOR-Puls-Sos", "Pulsante Antirapina Fisico Silenzioso da Banco", "Sistemi Antirapina", 35.0, "MSB_Sos"),
+    ("BOR-T-Neb150", "Sistema Nebbiogeno da 150mc", "Nebbiogeni", 1639.0, "MSB_Fog"),
+    ("BOR-T-Neb240", "Sistema Nebbiogeno da 240mc", "Nebbiogeni", 2139.0, "MSB_Fog"),
+    ("BOR-T-Neb400", "Sistema Nebbiogeno da 400mc", "Nebbiogeni", 3025.0, "MSB_Fog"),
+    ("BOR-T-Neb600", "Sistema Nebbiogeno da 600mc", "Nebbiogeni", 3795.0, "MSB_Fog"),
+    ("BOR-T-Neb900", "Sistema Nebbiogeno da 900mc", "Nebbiogeni", 4950.0, "MSB_Fog"),
+    ("BOR-AU150mq", "Nebbiogeno Specialistico 150mq", "Nebbiogeni", 2899.0, "MSB_Fog"),
+    ("BOR-Kit-Neb-1", "Ripiano per Gestione Nebbiogeno", "Nebbiogeni", 160.0, "MSB_Fog"),
+    ("BOR-PRL-AKBPR3", "Prolunga per Ugello Nebbiogeno -TEK-", "Nebbiogeni", 192.0, "MSB_Fog"),
+    ("BOR-2-TEK-RIC-BAG06T", "Ricarica Nebbiogeno -TEK- 240m Cubici", "Nebbiogeni", 96.0, "MSB_Fog"),
+    ("BOR-Staffa-Neb", "Staffa di Montaggio Orientabile per Nebbiogeno", "Nebbiogeni", 75.0, "MSB_Fog"),
+    ("BOR-Ugello-Dev", "Ugello con Deviazione Angolare 45°", "Nebbiogeni", 55.0, "MSB_Fog"),
+    ("BOR-Tamper-Neb", "Kit Protezione Antimanomissione e Strappo", "Nebbiogeni", 45.0, "MSB_Fog"),
+    ("BOR-Batteria-Neb", "Batteria di Backup Dedicata per Unita Nebbiogena", "Nebbiogeni", 68.0, "MSB_Fog"),
+    ("BOR-Liquido-Test", "Flacone Liquido Nebbiogeno di Prova per Collaudo", "Nebbiogeni", 35.0, "MSB_Fog"),
+    ("BOR-AiVisionSetup", "Configurazione AI e Analisi Video Intelligente", "Servizi Attivazione", 250.0, "Passivo"),
+    ("BOR-LabSetup", "Pre-Configurazione ed Assemblaggio Kit", "Servizi Attivazione", 150.0, "Passivo"),
+    ("BOR-LiveTestingCalibration", "Collaudo On-Site ed Allaccio Piattaforme BOR", "Servizi Attivazione", 200.0, "Passivo"),
+    ("BOR-ProjectManagement", "Direzione Lavori e Coordinamento Cantiere", "Servizi Attivazione", 650.0, "Passivo"),
+    ("BOR-TechnicalDesign", "Progettazione Tecnica Esecutiva", "Servizi Attivazione", 250.0, "Passivo")
+]
 
-def pulisci_dataframe(df_p, df_s):
-    df_p['Tipo Nodo'] = df_p['Tipo Nodo'].fillna('Passivo')
-    df_p['Descrizione Articolo'] = df_p['Descrizione Articolo'].fillna(df_p['Nome Articolo'])
-    df_p['Prezzo Unitario Listino'] = pd.to_numeric(df_p['Prezzo Unitario Listino'], errors='coerce').fillna(0.0)
-    df_s['Prezzo Unitario Listino'] = pd.to_numeric(df_s['Prezzo Unitario Listino'], errors='coerce').fillna(0.0)
-    return df_p, df_s
+CATALOGO_SERVIZI = [
+    ("BOR-H24-Stand-1", "Profilo H24 - Licenza Standard (1-4)", "Servizi di Teleportierato", 150.0),
+    ("BOR-H24-Stand-2", "Profilo H24 - Licenza Standard (4-16)", "Servizi di Teleportierato", 210.0),
+    ("BOR-H24-Stand-3", "Profilo H24 - Licenza Standard (16-32)", "Servizi di Teleportierato", 270.0),
+    ("BOR-H24-Stand-4", "Profilo H24 - Licenza Standard (32-48)", "Servizi di Teleportierato", 330.0),
+    ("BOR-H24-Stand-5", "Profilo H24 - Licenza Standard (48-64)", "Servizi di Teleportierato", 390.0),
+    ("BOR-H24-Stand-6", "Profilo H24 - Licenza Standard (64-80)", "Servizi di Teleportierato", 450.0),
+    ("BOR-H24-Stand-7", "Profilo H24 - Licenza Standard (80-96)", "Servizi di Teleportierato", 510.0),
+    ("BOR-ACT-Stand-1", "Profilo Su Inserimento - Licenza Standard (1-4)", "Servizi di Teleportierato", 120.0),
+    ("BOR-ACT-Stand-2", "Profilo Su Inserimento - Licenza Standard (4-16)", "Servizi di Teleportierato", 180.0),
+    ("BOR-ACT-Stand-3", "Profilo Su Inserimento - Licenza Standard (16-32)", "Servizi di Teleportierato", 240.0),
+    ("BOR-ACT-Stand-4", "Profilo Su Inserimento - Licenza Standard (32-48)", "Servizi di Teleportierato", 300.0),
+    ("BOR-ACT-Stand-5", "Profilo Su Inserimento - Licenza Standard (48-64)", "Servizi di Teleportierato", 360.0),
+    ("BOR-ACT-Stand-6", "Profilo Su Inserimento - Licenza Standard (64-80)", "Servizi di Teleportierato", 420.0),
+    ("BOR-ACT-Stand-7", "Profilo Su Inserimento - Licenza Standard (80-96)", "Servizi di Teleportierato", 480.0),
+    ("BOR-F-Time--Stand-1", "Profilo Fascia Oraria - Licenza Standard (1-4)", "Servizi di Teleportierato", 100.0),
+    ("BOR-F-Time--Stand-2", "Profilo Fascia Oraria - Licenza Standard (4-16)", "Servizi di Teleportierato", 160.0),
+    ("BOR-F-Time--Stand-3", "Profilo Fascia Oraria - Licenza Standard (16-32)", "Servizi di Teleportierato", 220.0),
+    ("BOR-F-Time--Stand-4", "Profilo Fascia Oraria - Licenza Standard (32-48)", "Servizi di Teleportierato", 280.0),
+    ("BOR-F-Time--Stand-5", "Profilo Fascia Oraria - Licenza Standard (48-64)", "Servizi di Teleportierato", 340.0),
+    ("BOR-F-Time--Stand-6", "Profilo Fascia Oraria - Licenza Standard (64-80)", "Servizi di Teleportierato", 400.0),
+    ("BOR-F-Time-Stand-7", "Profilo Fascia Oraria - Licenza Standard (80-96)", "Servizi di Teleportierato", 460.0),
+    ("BOR-M-Tech", "Monitoraggio Tecnologico ed Assistenza Help Desk", "Servizi Mensili (Canoni)", 35.0),
+    ("BOR-Chat-Mobile", "Chat Bidirezionale con i Guardiani BOR", "Servizi Mensili (Canoni)", 10.0),
+    ("COERCIZ-SERV", "Servizio Antirapina con Centrale Operativa H24", "Servizi Mensili (Canoni)", 69.0),
+    ("BOR-AlarmDetect", "Servizio di Ricezione Allarmi", "Servizi Mensili (Canoni)", 75.0),
+    ("BOR-Svc-GateAlarmCheck", "Servizio di Controllo Varchi", "Servizi Mensili (Canoni)", 29.0)
+]
 
-@st.cache_data(show_spinner=False)
-def carica_catalogo_in_cache(file_sorgente):
-    p = pd.read_excel(file_sorgente, sheet_name='Videosorveglianza BOR')
-    s = pd.read_excel(file_sorgente, sheet_name='Servizi BOR')
-    return pulisci_dataframe(p, s)
+# Converti in DataFrame in memoria (0.0001 secondi)
+DF_PROD = pd.DataFrame(CATALOGO_HARDWARE, columns=['Codice Prodotto', 'Nome Articolo', 'Macrocategoria', 'Prezzo Unitario Listino', 'Tipo Nodo'])
+DF_SERV = pd.DataFrame(CATALOGO_SERVIZI, columns=['Codice Prodotto', 'Nome Articolo', 'Macrocategoria', 'Prezzo Unitario Listino'])
 
 # ==========================================
-# GESTIONE TESTI E VALUTE PER IL PDF
+# GESTIONE TESTI E FORMATTAZIONE
 # ==========================================
 def safe_str(testo):
     if not testo or pd.isna(testo):
@@ -56,7 +162,7 @@ def calcola_assistenza_bor(nodi_totali):
     return 800.0 + (nodi_totali - 48) * 15.0
 
 # ==========================================
-# CLASSE PDF MEMORANDUM BOR (2 PAGINE)
+# GENERATORE PDF OTTIMIZZATO (MEMORANDUM BOR)
 # ==========================================
 class MemorandumBOR_PDF(FPDF):
     def __init__(self, cliente, agente, note_progetto):
@@ -66,9 +172,8 @@ class MemorandumBOR_PDF(FPDF):
         self.note_progetto = safe_str(note_progetto)
 
     def header(self):
-        # 1. POSIZIONAMENTO LOGO BOR PROTETTO DALLA LINEA
+        # Logo controllato in altezza: y=6, h=13 (non tocca la riga a y=24.5)
         if os.path.exists("logo_bor.png"):
-            # h=13 fissa l'altezza: il logo si estende da y=6 a y=19 max
             self.image("logo_bor.png", 10, 6, h=13)
         else:
             self.set_xy(10, 8)
@@ -84,7 +189,6 @@ class MemorandumBOR_PDF(FPDF):
         self.set_text_color(100, 116, 139)
         self.cell(0, 4, 'Sistemi di Sicurezza in Telepresenza e Gestione Eventi Critici', 0, 1, 'R')
         
-        # Linea orizzontale posta a y=24.5 (sotto al logo di oltre 5 mm)
         self.set_draw_color(30, 58, 138)
         self.set_line_width(0.6)
         self.line(10, 24.5, 200, 24.5)
@@ -114,7 +218,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     # ------------------ PAGINA 1 ------------------
     pdf.add_page()
     
-    # Intestazione Cliente / Regime
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 26, 190, 18, 'FD')
@@ -156,7 +259,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     pdf.cell(24, 3.5, 'Note Esecutive:', 0, 0)
     pdf.set_font('Arial', 'I', 7)
     pdf.set_text_color(71, 85, 105)
-    pdf.cell(0, 3.5, safe_str(note) if note else "Configurazione su misura calcolata in base all'analisi dei varchi e criticita'.", 0, 1)
+    pdf.cell(0, 3.5, safe_str(note) if note else "Configurazione calcolata su misura delle criticita del sito.", 0, 1)
 
     pdf.set_y(47)
 
@@ -192,7 +295,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.set_y(start_y + 28)
 
-    # 2. Dettaglio Hardware per Macrocategorie
+    # 2. Dettaglio Hardware
     pdf.box_sezione("2. COMPONENTI HARDWARE SUDDIVISI PER MACROCATEGORIE")
     categorie_map = {}
     for item in carrello_hw:
@@ -211,7 +314,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.ln(2)
 
-    # 3. Servizi di Ingegnerizzazione Inclusi (LARGHEZZA CELLA CORRETTA = 64mm)
+    # 3. Servizi inclusi (larghezza colonna 64 mm per evitare sovrapposizioni)
     pdf.box_sezione("3. SERVIZI BOR PER L'ATTIVAZIONE DEL SISTEMA (INCLUSI)")
     servizi_elenco = [
         ("Progettazione Tecnica Esecutiva", "Analisi vulnerabilita', coni visivi e piano planimetrico di copertura."),
@@ -223,7 +326,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     for tit, desc in servizi_elenco:
         pdf.set_font('Arial', 'B', 7.5)
         pdf.set_text_color(30, 58, 138)
-        # Larghezza portata a 64mm per impedire qualsiasi sovrapposizione
         pdf.cell(64, 3.8, f"[INCLUSO] {tit}:", 0, 0)
         pdf.set_font('Arial', '', 7)
         pdf.set_text_color(51, 65, 85)
@@ -284,7 +386,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.ln(3)
 
-    # 5. Moduli MSB Opzionali
+    # 5. Moduli MSB
     if servizi_sel:
         pdf.box_sezione("5. UPGRADE SERVIZI MENSILI PERSONALIZZATI (MSB)")
         pdf.set_font('Arial', '', 7.5)
@@ -348,7 +450,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     return bytes(raw_output)
 
 # ==========================================
-# INTERFACCIA UTENTE (STREAMLIT CPQ)
+# INTERFACCIA STREAMLIT ULTRA-RAPIDA
 # ==========================================
 st.set_page_config(page_title="BOR CPQ - Preventivatore Ufficiale", page_icon="🛡️", layout="wide")
 
@@ -356,30 +458,6 @@ if os.path.exists("logo_bor.png"):
     st.image("logo_bor.png", width=220)
 st.title("Configuratore Preventivi & Memorandum BOR")
 
-# 1. Caricamento rapido catalogo in memoria
-file_locale = trova_file_excel_locale()
-df_prodotti = None
-df_servizi = None
-
-if file_locale:
-    try:
-        df_prodotti, df_servizi = carica_catalogo_in_cache(file_locale)
-    except Exception:
-        pass
-
-if df_prodotti is None:
-    st.info("💡 **Modalità Cloud / Primo Avvio:** Trascina qui il file Excel del listino per iniziare.")
-    up = st.file_uploader("Carica file Excel catalogo BOR", type=["xlsx"])
-    if up is not None:
-        try:
-            df_prodotti, df_servizi = carica_catalogo_in_cache(up)
-        except Exception:
-            st.error("Errore nella lettura del file Excel caricato. Verifica i fogli 'Videosorveglianza BOR' e 'Servizi BOR'.")
-            st.stop()
-    else:
-        st.stop()
-
-# Session state per carrello
 if "carrello_hw" not in st.session_state:
     st.session_state.carrello_hw = []
 
@@ -404,19 +482,20 @@ with col_dati:
 with col_cfg:
     st.subheader("3. Selezione Componenti Hardware")
     
-    macro_disponibili = sorted(df_prodotti['Macrocategoria'].unique())
+    macro_disponibili = sorted(DF_PROD['Macrocategoria'].unique())
     c1, c2, c3, c4 = st.columns([1.5, 2.5, 0.8, 1])
     
     with c1:
         cat_sel = st.selectbox("Macrocategoria", macro_disponibili)
     with c2:
-        prodotti_filtrati = df_prodotti[df_prodotti['Macrocategoria'] == cat_sel]
+        prodotti_filtrati = DF_PROD[DF_PROD['Macrocategoria'] == cat_sel]
         prod_sel = st.selectbox("Articolo", prodotti_filtrati['Nome Articolo'].tolist())
     with c3:
         qt_sel = st.number_input("Qt.", min_value=1, value=1, step=1)
     with c4:
         st.write("")
         st.write("")
+        # Nessun st.rerun(): aggiunta istantanea in memoria
         if st.button("➕ Aggiungi", use_container_width=True):
             riga_prod = prodotti_filtrati[prodotti_filtrati['Nome Articolo'] == prod_sel].iloc[0]
             st.session_state.carrello_hw.append({
@@ -428,9 +507,8 @@ with col_cfg:
                 "totale": float(riga_prod['Prezzo Unitario Listino']) * int(qt_sel),
                 "tipo_nodo": str(riga_prod['Tipo Nodo'])
             })
-            st.rerun()
 
-    # Visualizzazione tabella distinta
+    # Visualizzazione distinta carrello
     if st.session_state.carrello_hw:
         df_carrello = pd.DataFrame(st.session_state.carrello_hw)
         st.dataframe(
@@ -450,13 +528,11 @@ with col_cfg:
         with b_col1:
             if st.button("🗑️ Rimuovi Ultimo Articolo", use_container_width=True):
                 st.session_state.carrello_hw.pop()
-                st.rerun()
         with b_col2:
             if st.button("⚠️ Svuota Intera Distinta", use_container_width=True):
                 st.session_state.carrello_hw = []
-                st.rerun()
     else:
-        st.info("Nessun articolo inserito. Seleziona una macrocategoria e premi '➕ Aggiungi'.")
+        st.info("Nessun articolo inserito. Seleziona una macrocategoria e clicca '➕ Aggiungi'.")
 
     st.subheader("4. Canoni e Servizi di Telepresenza BOR")
     
@@ -489,7 +565,7 @@ with col_cfg:
 
     st.write(f"Nodi Video: **{nodi_cam}** | Canone Base Calcolato: **Euro {fmt_eur(canoni_calcolati['Su Inserimento (Zero Presenza)'])} / mese**")
 
-    servizi_mensili_disponibili = df_servizi[df_servizi['Macrocategoria'].str.contains('Mensili|Canoni', na=False)]
+    servizi_mensili_disponibili = DF_SERV[DF_SERV['Macrocategoria'].str.contains('Mensili|Canoni', na=False)]
     servizi_selezionati = []
     
     cols_serv = st.columns(2)
@@ -506,7 +582,7 @@ with col_cfg:
         idx_s += 1
 
 # ==========================================
-# RIEPILOGO ECONOMICO E DOWNLOAD PDF
+# RIEPILOGO ECONOMICO E TASTO PDF DIRETTO
 # ==========================================
 st.markdown("---")
 st.header("5. Riepilogo Economico & Esportazione PDF")
