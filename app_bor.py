@@ -30,7 +30,7 @@ def carica_catalogo_in_cache(file_sorgente):
     return pulisci_dataframe(p, s)
 
 # ==========================================
-# GESTIONE TESTI SICURI PER IL PDF
+# GESTIONE TESTI E VALUTE PER IL PDF
 # ==========================================
 def safe_str(testo):
     if not testo or pd.isna(testo):
@@ -44,6 +44,9 @@ def safe_str(testo):
     for k, v in conversione.items():
         testo = testo.replace(k, v)
     return testo.encode('latin-1', 'replace').decode('latin-1')
+
+def fmt_eur(val):
+    return f"{val:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 def calcola_assistenza_bor(nodi_totali):
     tiers = [(4, 100.0), (8, 150.0), (16, 250.0), (32, 400.0), (48, 600.0)]
@@ -63,25 +66,28 @@ class MemorandumBOR_PDF(FPDF):
         self.note_progetto = safe_str(note_progetto)
 
     def header(self):
+        # 1. POSIZIONAMENTO LOGO BOR PROTETTO DALLA LINEA
         if os.path.exists("logo_bor.png"):
-            self.image("logo_bor.png", 10, 8, 38)
-            self.set_xy(50, 10)
+            # h=13 fissa l'altezza: il logo si estende da y=6 a y=19 max
+            self.image("logo_bor.png", 10, 6, h=13)
         else:
-            self.set_xy(10, 10)
+            self.set_xy(10, 8)
             self.set_font('Arial', 'B', 18)
             self.set_text_color(30, 58, 138)
             self.cell(40, 10, 'BOR', 0, 0, 'L')
-            self.set_xy(50, 10)
 
+        self.set_xy(50, 8)
         self.set_font('Arial', 'B', 12)
         self.set_text_color(30, 58, 138)
-        self.cell(0, 6, 'MEMORANDUM OPERATIVO E DI INVESTIMENTO', 0, 1, 'R')
+        self.cell(0, 5.5, 'MEMORANDUM OPERATIVO E DI INVESTIMENTO', 0, 1, 'R')
         self.set_font('Arial', '', 8)
         self.set_text_color(100, 116, 139)
         self.cell(0, 4, 'Sistemi di Sicurezza in Telepresenza e Gestione Eventi Critici', 0, 1, 'R')
+        
+        # Linea orizzontale posta a y=24.5 (sotto al logo di oltre 5 mm)
         self.set_draw_color(30, 58, 138)
         self.set_line_width(0.6)
-        self.line(10, 24, 200, 24)
+        self.line(10, 24.5, 200, 24.5)
         self.ln(6)
 
     def footer(self):
@@ -108,6 +114,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     # ------------------ PAGINA 1 ------------------
     pdf.add_page()
     
+    # Intestazione Cliente / Regime
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 26, 190, 18, 'FD')
@@ -174,14 +181,14 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     pdf.set_xy(12, start_y + 7.5)
     pdf.set_font('Arial', 'B', 12)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(186, 6.5, f"Euro {totale_finale:,.2f} + IVA", 0, 1, 'C')
+    pdf.cell(186, 6.5, f"Euro {fmt_eur(totale_finale)} + IVA", 0, 1, 'C')
     
     pdf.set_xy(12, start_y + 15)
     pdf.set_font('Arial', '', 7.5)
     pdf.set_text_color(71, 85, 105)
     pdf.cell(186, 3.5, f"Dotazione attiva: {nodi_cam} Nodi Telecamera | {nodi_totali} Nodi Totali di Rete Presidiati", 0, 1, 'C')
     pdf.set_xy(12, start_y + 18.5)
-    pdf.cell(186, 3.5, f"Quota Servizi Ingegnerizzazione e Laboratorio inclusa a corpo (Euro {assistenza:,.2f})", 0, 1, 'C')
+    pdf.cell(186, 3.5, f"Quota Servizi Ingegnerizzazione e Laboratorio inclusa a corpo (Euro {fmt_eur(assistenza)})", 0, 1, 'C')
 
     pdf.set_y(start_y + 28)
 
@@ -204,7 +211,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.ln(2)
 
-    # 3. Servizi di Ingegnerizzazione Inclusi
+    # 3. Servizi di Ingegnerizzazione Inclusi (LARGHEZZA CELLA CORRETTA = 64mm)
     pdf.box_sezione("3. SERVIZI BOR PER L'ATTIVAZIONE DEL SISTEMA (INCLUSI)")
     servizi_elenco = [
         ("Progettazione Tecnica Esecutiva", "Analisi vulnerabilita', coni visivi e piano planimetrico di copertura."),
@@ -216,10 +223,11 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     for tit, desc in servizi_elenco:
         pdf.set_font('Arial', 'B', 7.5)
         pdf.set_text_color(30, 58, 138)
-        pdf.cell(50, 3.6, f"[INCLUSO] {tit}:", 0, 0)
+        # Larghezza portata a 64mm per impedire qualsiasi sovrapposizione
+        pdf.cell(64, 3.8, f"[INCLUSO] {tit}:", 0, 0)
         pdf.set_font('Arial', '', 7)
         pdf.set_text_color(51, 65, 85)
-        pdf.cell(0, 3.6, desc, 0, 1)
+        pdf.cell(0, 3.8, desc, 0, 1)
 
     pdf.ln(2)
 
@@ -272,7 +280,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
         pdf.cell(40, 5.5, desc_profili.get(nome_prof, ''), 1, 0, 'C')
         pdf.set_font('Arial', 'B', 8)
         pdf.set_text_color(30, 58, 138)
-        pdf.cell(45, 5.5, f'Euro {canone:,.2f} / mese', 1, 1, 'C')
+        pdf.cell(45, 5.5, f'Euro {fmt_eur(canone)} / mese', 1, 1, 'C')
 
     pdf.ln(3)
 
@@ -288,7 +296,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
             pdf.cell(115, 5, safe_str(s['nome']), 0, 0, 'L')
             pdf.set_font('Arial', 'B', 8)
             pdf.set_text_color(30, 58, 138)
-            pdf.cell(0, 5, f'+ Euro {s["prezzo"]:,.2f} / mese', 0, 1, 'R')
+            pdf.cell(0, 5, f'+ Euro {fmt_eur(s["prezzo"])} / mese', 0, 1, 'R')
         pdf.ln(2)
 
     # 6. Clausole e Firme
@@ -420,6 +428,7 @@ with col_cfg:
                 "totale": float(riga_prod['Prezzo Unitario Listino']) * int(qt_sel),
                 "tipo_nodo": str(riga_prod['Tipo Nodo'])
             })
+            st.rerun()
 
     # Visualizzazione tabella distinta
     if st.session_state.carrello_hw:
@@ -441,9 +450,11 @@ with col_cfg:
         with b_col1:
             if st.button("🗑️ Rimuovi Ultimo Articolo", use_container_width=True):
                 st.session_state.carrello_hw.pop()
+                st.rerun()
         with b_col2:
             if st.button("⚠️ Svuota Intera Distinta", use_container_width=True):
                 st.session_state.carrello_hw = []
+                st.rerun()
     else:
         st.info("Nessun articolo inserito. Seleziona una macrocategoria e premi '➕ Aggiungi'.")
 
@@ -476,7 +487,7 @@ with col_cfg:
     }
     canoni_calcolati = {nome: round(base_core * mult * k_ambiente, 2) for nome, mult in moltiplicatori.items()}
 
-    st.write(f"Nodi Video: **{nodi_cam}** | Canone Base Calcolato: **Euro {canoni_calcolati['Su Inserimento (Zero Presenza)']:.2f} / mese**")
+    st.write(f"Nodi Video: **{nodi_cam}** | Canone Base Calcolato: **Euro {fmt_eur(canoni_calcolati['Su Inserimento (Zero Presenza)'])} / mese**")
 
     servizi_mensili_disponibili = df_servizi[df_servizi['Macrocategoria'].str.contains('Mensili|Canoni', na=False)]
     servizi_selezionati = []
@@ -495,25 +506,26 @@ with col_cfg:
         idx_s += 1
 
 # ==========================================
-# RIEPILOGO ECONOMICO & DOWNLOAD 1-CLICK
+# RIEPILOGO ECONOMICO E DOWNLOAD PDF
 # ==========================================
 st.markdown("---")
 st.header("5. Riepilogo Economico & Esportazione PDF")
 
-if st.session_state.carrello_hw:
+ha_articoli = len(st.session_state.carrello_hw) > 0
+
+if ha_articoli:
     tot_hw = sum(item['totale'] for item in st.session_state.carrello_hw)
     nodi_tot = sum(item['qt'] for item in st.session_state.carrello_hw if item['tipo_nodo'] in ['Camera', 'Audio', 'MSB_Fog', 'MSB_Sos', 'MSB_Gate'])
     assistenza = calcola_assistenza_bor(nodi_tot)
     totale_finale = tot_hw + assistenza
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Totale Hardware Listino", f"Euro {tot_hw:,.2f}")
-    m2.metric("Ingegnerizzazione Inclusa", f"Euro {assistenza:,.2f}")
-    m3.metric("Offerta a Corpo Finita", f"Euro {totale_finale:,.2f} + IVA")
+    m1.metric("Totale Hardware Listino", f"Euro {fmt_eur(tot_hw)}")
+    m2.metric("Ingegnerizzazione Inclusa", f"Euro {fmt_eur(assistenza)}")
+    m3.metric("Offerta a Corpo Finita", f"Euro {fmt_eur(totale_finale)} + IVA")
     m4.metric("Nodi Rete Totali", f"{nodi_tot} Nodi")
 
     st.write("")
-    
     nome_pulito = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Proposta'}.pdf"
 
     pdf_bytes = genera_pdf_memorandum(
@@ -522,7 +534,7 @@ if st.session_state.carrello_hw:
     )
 
     st.download_button(
-        label="📥 SCARICA IL PREVENTIVO PDF UFFICIALE (2 PAGINE)",
+        label="🚀 SCARICA PREVENTIVO PDF UFFICIALE (2 PAGINE)",
         data=pdf_bytes,
         file_name=nome_pulito,
         mime="application/pdf",
@@ -530,4 +542,10 @@ if st.session_state.carrello_hw:
         use_container_width=True
     )
 else:
-    st.info("👆 Seleziona un componente hardware e clicca **➕ Aggiungi** per comporre l'offerta.")
+    st.info("👆 Seleziona un componente hardware e clicca **➕ Aggiungi** per comporre l'offerta e sbloccare il download.")
+    st.download_button(
+        label="📥 Aggiungi almeno un componente per scaricare il PDF",
+        data=b"",
+        disabled=True,
+        use_container_width=True
+    )
