@@ -6,34 +6,27 @@ import datetime
 import os
 
 # ==========================================
-# GESTIONE CARICAMENTO CATALOGO (EXCEL)
+# GESTIONE CARICAMENTO CATALOGO (FLESSIBILE)
 # ==========================================
-EXCEL_FILE = "Sviluppo Elenco Prodotti BOR con Codici - 2026 .xlsx"
+def trova_file_excel_locale():
+    candidati = [f for f in os.listdir('.') if f.endswith('.xlsx') and not f.startswith('~$')]
+    # Privilegia file con BOR o Sviluppo nel nome
+    candidati_bor = [f for f in candidati if any(k in f for k in ['BOR', 'Sviluppo', 'Prodotti'])]
+    if candidati_bor:
+        return candidati_bor[0]
+    if candidati:
+        return candidati[0]
+    return None
 
-@st.cache_data
-def carica_cataloghi():
-    if os.path.exists(EXCEL_FILE):
-        df_prod = pd.read_excel(EXCEL_FILE, sheet_name='Videosorveglianza BOR')
-        df_serv = pd.read_excel(EXCEL_FILE, sheet_name='Servizi BOR')
-    elif os.path.exists("Sviluppo Elenco Prodotti BOR con Codici - 2026 -2.xlsx"):
-        df_prod = pd.read_excel("Sviluppo Elenco Prodotti BOR con Codici - 2026 -2.xlsx", sheet_name='Videosorveglianza BOR')
-        df_serv = pd.read_excel("Sviluppo Elenco Prodotti BOR con Codici - 2026 -2.xlsx", sheet_name='Servizi BOR')
-    else:
-        st.error(f"File catalogo '{EXCEL_FILE}' non trovato nella cartella dell'applicazione.")
-        st.stop()
-    
-    # Pulizia e riempimento valori nulli
-    df_prod['Tipo Nodo'] = df_prod['Tipo Nodo'].fillna('Passivo')
-    df_prod['Descrizione Articolo'] = df_prod['Descrizione Articolo'].fillna(df_prod['Nome Articolo'])
-    df_prod['Prezzo Unitario Listino'] = pd.to_numeric(df_prod['Prezzo Unitario Listino'], errors='coerce').fillna(0.0)
-    
-    df_serv['Prezzo Unitario Listino'] = pd.to_numeric(df_serv['Prezzo Unitario Listino'], errors='coerce').fillna(0.0)
-    return df_prod, df_serv
-
-df_prodotti, df_servizi = carica_cataloghi()
+def pulisci_dataframe(df_p, df_s):
+    df_p['Tipo Nodo'] = df_p['Tipo Nodo'].fillna('Passivo')
+    df_p['Descrizione Articolo'] = df_p['Descrizione Articolo'].fillna(df_p['Nome Articolo'])
+    df_p['Prezzo Unitario Listino'] = pd.to_numeric(df_p['Prezzo Unitario Listino'], errors='coerce').fillna(0.0)
+    df_s['Prezzo Unitario Listino'] = pd.to_numeric(df_s['Prezzo Unitario Listino'], errors='coerce').fillna(0.0)
+    return df_p, df_s
 
 # ==========================================
-# GESTIONE CARATTERI SICURI PER PDF
+# GESTIONE TESTI SICURI PER IL PDF
 # ==========================================
 def safe_str(testo):
     if not testo or pd.isna(testo):
@@ -48,7 +41,6 @@ def safe_str(testo):
         testo = testo.replace(k, v)
     return testo.encode('latin-1', 'replace').decode('latin-1')
 
-# Calcolo quota ingegnerizzazione e collaudo BOR inclusa
 def calcola_assistenza_bor(nodi_totali):
     tiers = [(4, 100.0), (8, 150.0), (16, 250.0), (32, 400.0), (48, 600.0)]
     for limite, tariffa in tiers:
@@ -112,7 +104,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     # ------------------ PAGINA 1 ------------------
     pdf.add_page()
     
-    # Riquadro Dati Intestazione
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 26, 190, 18, 'FD')
@@ -190,9 +181,8 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.set_y(start_y + 28)
 
-    # 2. Dettaglio per macrocategorie
+    # 2. Dettaglio Hardware per Macrocategorie
     pdf.box_sezione("2. COMPONENTI HARDWARE SUDDIVISI PER MACROCATEGORIE")
-    # Raggruppa gli articoli per macrocategoria
     categorie_map = {}
     for item in carrello_hw:
         cat = item['categoria']
@@ -282,7 +272,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.ln(3)
 
-    # 5. Servizi Mensili Aggiuntivi Selezionati
+    # 5. Moduli MSB Opzionali
     if servizi_sel:
         pdf.box_sezione("5. UPGRADE SERVIZI MENSILI PERSONALIZZATI (MSB)")
         pdf.set_font('Arial', '', 7.5)
@@ -297,7 +287,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
             pdf.cell(0, 5, f'+ Euro {s["prezzo"]:,.2f} / mese', 0, 1, 'R')
         pdf.ln(2)
 
-    # 6. Clausole, Garanzie e Firme
+    # 6. Clausole e Firme
     pdf.box_sezione("6. CLAUSOLE DI SALVAGUARDIA, GARANZIE E ACCONTO")
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
@@ -351,17 +341,49 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     return bytes_out
 
 # ==========================================
-# INTERFACCIA UTENTE STREAMLIT (CPQ NATIVO)
+# INTERFACCIA UTENTE (STREAMLIT CPQ)
 # ==========================================
-st.set_page_config(page_title="BOR CPQ - Preventivatore Ufficiale", page_icon="logo_bor.png" if os.path.exists("logo_bor.png") else "🛡️", layout="wide")
+st.set_page_config(page_title="BOR CPQ - Preventivatore Ufficiale", page_icon="🛡️", layout="wide")
 
 if os.path.exists("logo_bor.png"):
     st.image("logo_bor.png", width=220)
 st.title("Configuratore Preventivi & Memorandum BOR")
 
-# Inizializzazione sessione carrello
+# 1. Tenta caricamento automatico
+file_locale = trova_file_excel_locale()
+df_prodotti = None
+df_servizi = None
+
+if file_locale:
+    try:
+        p = pd.read_excel(file_locale, sheet_name='Videosorveglianza BOR')
+        s = pd.read_excel(file_locale, sheet_name='Servizi BOR')
+        df_prodotti, df_servizi = pulisci_dataframe(p, s)
+    except Exception:
+        pass
+
+# 2. Fallback con uploader se il file non è presente nella cartella
+if df_prodotti is None:
+    st.info("💡 **Modalità Cloud / Primo Avvio:** Il catalogo non è presente sul server. Trascina qui sotto il file Excel del listino per iniziare la sessione.")
+    up = st.file_uploader("Carica file Excel 'Sviluppo Elenco Prodotti BOR con Codici - 2026.xlsx'", type=["xlsx"])
+    if up is not None:
+        try:
+            p = pd.read_excel(up, sheet_name='Videosorveglianza BOR')
+            s = pd.read_excel(up, sheet_name='Servizi BOR')
+            df_prodotti, df_servizi = pulisci_dataframe(p, s)
+        except Exception as e:
+            st.error("Errore nella lettura del file Excel caricato. Verifica che contenga i fogli 'Videosorveglianza BOR' e 'Servizi BOR'.")
+            st.stop()
+    else:
+        st.stop()
+
+# Session state per carrello e PDF
 if "carrello_hw" not in st.session_state:
     st.session_state.carrello_hw = []
+if "pdf_pronto" not in st.session_state:
+    st.session_state.pdf_pronto = None
+if "pdf_nomefile" not in st.session_state:
+    st.session_state.pdf_nomefile = "Memorandum_BOR.pdf"
 
 col_dati, col_cfg = st.columns([1, 2])
 
@@ -408,9 +430,10 @@ with col_cfg:
                 "totale": float(riga_prod['Prezzo Unitario Listino']) * int(qt_sel),
                 "tipo_nodo": str(riga_prod['Tipo Nodo'])
             })
+            st.session_state.pdf_pronto = None
             st.rerun()
 
-    # Visualizzazione tabella carrello
+    # Distinta carrello
     if st.session_state.carrello_hw:
         df_carrello = pd.DataFrame(st.session_state.carrello_hw)
         st.dataframe(
@@ -419,24 +442,22 @@ with col_cfg:
                 "categoria": "Macrocategoria",
                 "nome": "Componente",
                 "qt": "Quantità",
-                "prezzo_unit": st.column_config.NumberColumn("Prezzo Unit. (€)", format="%.2f €"),
+                "prezzo_unit": st.column_config.NumberColumn("Listino Unit. (€)", format="%.2f €"),
                 "totale": st.column_config.NumberColumn("Totale (€)", format="%.2f €")
             },
             use_container_width=True,
             hide_index=True
         )
-        if st.button("🗑️ Svuota Carrello Hardware"):
+        if st.button("🗑️ Svuota Distinta Componenti"):
             st.session_state.carrello_hw = []
+            st.session_state.pdf_pronto = None
             st.rerun()
     else:
-        st.info("Nessun articolo inserito. Seleziona una categoria e premi '➕ Aggiungi'.")
+        st.info("Nessun articolo inserito. Seleziona una macrocategoria e premi '➕ Aggiungi'.")
 
-    st.subheader("4. Canoni e Servizi di Centrale")
+    st.subheader("4. Canoni e Servizi di Telepresenza BOR")
     
-    # Rilevamento automatico parametri licenza
     nodi_cam = sum(item['qt'] for item in st.session_state.carrello_hw if item['tipo_nodo'] == 'Camera')
-    
-    # Calcolo Canoni Telepresenza
     tariffe_core = [(4, 100.0), (8, 150.0), (16, 200.0), (32, 300.0), (48, 400.0), (64, 500.0)]
     quota_tele = 500.0 + ((nodi_cam - 64) // 16) * 100.0 if nodi_cam > 64 else 100.0
     for lim, tar in tariffe_core:
@@ -463,9 +484,8 @@ with col_cfg:
     }
     canoni_calcolati = {nome: round(base_core * mult * k_ambiente, 2) for nome, mult in moltiplicatori.items()}
 
-    st.write(f"Nodi Telecamera Rilevati: **{nodi_cam}** | Canone Base di Riferimento: **Euro {canoni_calcolati['Su Inserimento (Zero Presenza)']} / mese**")
+    st.write(f"Nodi Video: **{nodi_cam}** | Base Core Calcolata: **Euro {canoni_calcolati['Su Inserimento (Zero Presenza)']:.2f} / mese**")
 
-    # Selezione Servizi Mensili Integrativi (MSB)
     servizi_mensili_disponibili = df_servizi[df_servizi['Macrocategoria'].str.contains('Mensili|Canoni', na=False)]
     servizi_selezionati = []
     
@@ -483,10 +503,10 @@ with col_cfg:
         idx_s += 1
 
 # ==========================================
-# RIEPILOGO ECONOMICO & GENERAZIONE PDF
+# GENERAZIONE E DOWNLOAD PREVENTIVO PDF
 # ==========================================
 st.markdown("---")
-st.header("5. Sintesi Economica Globale e Download Offerta")
+st.header("5. Riepilogo Economico & Esportazione PDF")
 
 if st.session_state.carrello_hw:
     tot_hw = sum(item['totale'] for item in st.session_state.carrello_hw)
@@ -495,23 +515,31 @@ if st.session_state.carrello_hw:
     totale_finale = tot_hw + assistenza
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Totale Hardware Listino", f"Euro {tot_hw:,.2f}")
+    m1.metric("Totale Hardware di Listino", f"Euro {tot_hw:,.2f}")
     m2.metric("Ingegnerizzazione Inclusa", f"Euro {assistenza:,.2f}")
-    m3.metric("Totale Offerta a Corpo", f"Euro {totale_finale:,.2f} + IVA")
-    m4.metric("Nodi Totali Presidiati", f"{nodi_tot} Nodi")
+    m3.metric("Offerta a Corpo Finita", f"Euro {totale_finale:,.2f} + IVA")
+    m4.metric("Nodi Rete Totali", f"{nodi_tot} Nodi")
 
-    nome_file = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Proposta'}.pdf"
+    st.write("")
     
-    # Genera i bytes del PDF
-    pdf_bytes = genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, st.session_state.carrello_hw, servizi_selezionati, canoni_calcolati)
+    if st.button("🚀 GENERA PREVENTIVO PDF UFFICIALE", type="primary", use_container_width=True):
+        nome_pulito = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Proposta'}.pdf"
+        bytes_generati = genera_pdf_memorandum(
+            cliente, agente, note, acconto, tipo_contratto,
+            st.session_state.carrello_hw, servizi_selezionati, canoni_calcolati
+        )
+        st.session_state.pdf_pronto = bytes_generati
+        st.session_state.pdf_nomefile = nome_pulito
 
-    st.download_button(
-        label="📥 SCARICA MEMORANDUM PDF UFFICIALE BOR (2 PAGINE)",
-        data=pdf_bytes,
-        file_name=nome_file,
-        mime="application/pdf",
-        type="primary",
-        use_container_width=True
-    )
+    if st.session_state.pdf_pronto is not None:
+        st.success(f"🎉 **Preventivo pronto per il download: {st.session_state.pdf_nomefile}**")
+        st.download_button(
+            label="📥 CLICCA QUI PER SCARICARE IL PREVENTIVO PDF (2 PAGINE)",
+            data=st.session_state.pdf_pronto,
+            file_name=st.session_state.pdf_nomefile,
+            mime="application/pdf",
+            type="secondary",
+            use_container_width=True
+        )
 else:
-    st.warning("Aggiungi almeno un componente hardware al carrello per poter calcolare e scaricare il Memorandum.")
+    st.warning("Aggiungi almeno un componente hardware alla distinta per poter generare e scaricare il PDF.")
