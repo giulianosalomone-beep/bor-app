@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
-import tempfile
 import datetime
 import os
 
@@ -10,7 +9,6 @@ import os
 # ==========================================
 def trova_file_excel_locale():
     candidati = [f for f in os.listdir('.') if f.endswith('.xlsx') and not f.startswith('~$')]
-    # Privilegia file con BOR o Sviluppo nel nome
     candidati_bor = [f for f in candidati if any(k in f for k in ['BOR', 'Sviluppo', 'Prodotti'])]
     if candidati_bor:
         return candidati_bor[0]
@@ -330,15 +328,11 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     pdf.cell(95, 4, 'Firma: ____________________________________', 0, 0, 'L')
     pdf.cell(95, 4, 'Firma: ____________________________________', 0, 1, 'L')
 
-    temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-    pdf.output(temp_pdf.name)
-    with open(temp_pdf.name, "rb") as f:
-        bytes_out = f.read()
-    try:
-        os.remove(temp_pdf.name)
-    except:
-        pass
-    return bytes_out
+    # Generazione diretta in memoria senza scrittura su file temporaneo
+    raw_output = pdf.output(dest='S')
+    if isinstance(raw_output, str):
+        return raw_output.encode('latin-1')
+    return bytes(raw_output)
 
 # ==========================================
 # INTERFACCIA UTENTE (STREAMLIT CPQ)
@@ -349,7 +343,7 @@ if os.path.exists("logo_bor.png"):
     st.image("logo_bor.png", width=220)
 st.title("Configuratore Preventivi & Memorandum BOR")
 
-# 1. Tenta caricamento automatico
+# 1. Caricamento automatico
 file_locale = trova_file_excel_locale()
 df_prodotti = None
 df_servizi = None
@@ -362,28 +356,24 @@ if file_locale:
     except Exception:
         pass
 
-# 2. Fallback con uploader se il file non è presente nella cartella
+# 2. Uploader per Cloud / fallback
 if df_prodotti is None:
-    st.info("💡 **Modalità Cloud / Primo Avvio:** Il catalogo non è presente sul server. Trascina qui sotto il file Excel del listino per iniziare la sessione.")
+    st.info("💡 **Modalità Cloud / Primo Avvio:** Il catalogo non è presente sul server. Trascina qui sotto il file Excel del listino per iniziare.")
     up = st.file_uploader("Carica file Excel 'Sviluppo Elenco Prodotti BOR con Codici - 2026.xlsx'", type=["xlsx"])
     if up is not None:
         try:
             p = pd.read_excel(up, sheet_name='Videosorveglianza BOR')
             s = pd.read_excel(up, sheet_name='Servizi BOR')
             df_prodotti, df_servizi = pulisci_dataframe(p, s)
-        except Exception as e:
-            st.error("Errore nella lettura del file Excel caricato. Verifica che contenga i fogli 'Videosorveglianza BOR' e 'Servizi BOR'.")
+        except Exception:
+            st.error("Errore nella lettura del file Excel caricato. Verifica i fogli 'Videosorveglianza BOR' e 'Servizi BOR'.")
             st.stop()
     else:
         st.stop()
 
-# Session state per carrello e PDF
+# Session state per distinta
 if "carrello_hw" not in st.session_state:
     st.session_state.carrello_hw = []
-if "pdf_pronto" not in st.session_state:
-    st.session_state.pdf_pronto = None
-if "pdf_nomefile" not in st.session_state:
-    st.session_state.pdf_nomefile = "Memorandum_BOR.pdf"
 
 col_dati, col_cfg = st.columns([1, 2])
 
@@ -430,10 +420,9 @@ with col_cfg:
                 "totale": float(riga_prod['Prezzo Unitario Listino']) * int(qt_sel),
                 "tipo_nodo": str(riga_prod['Tipo Nodo'])
             })
-            st.session_state.pdf_pronto = None
             st.rerun()
 
-    # Distinta carrello
+    # Visualizzazione carrello
     if st.session_state.carrello_hw:
         df_carrello = pd.DataFrame(st.session_state.carrello_hw)
         st.dataframe(
@@ -450,7 +439,6 @@ with col_cfg:
         )
         if st.button("🗑️ Svuota Distinta Componenti"):
             st.session_state.carrello_hw = []
-            st.session_state.pdf_pronto = None
             st.rerun()
     else:
         st.info("Nessun articolo inserito. Seleziona una macrocategoria e premi '➕ Aggiungi'.")
@@ -484,7 +472,7 @@ with col_cfg:
     }
     canoni_calcolati = {nome: round(base_core * mult * k_ambiente, 2) for nome, mult in moltiplicatori.items()}
 
-    st.write(f"Nodi Video: **{nodi_cam}** | Base Core Calcolata: **Euro {canoni_calcolati['Su Inserimento (Zero Presenza)']:.2f} / mese**")
+    st.write(f"Nodi Video Rilevati: **{nodi_cam}** | Canone Base Calcolato: **Euro {canoni_calcolati['Su Inserimento (Zero Presenza)']:.2f} / mese**")
 
     servizi_mensili_disponibili = df_servizi[df_servizi['Macrocategoria'].str.contains('Mensili|Canoni', na=False)]
     servizi_selezionati = []
@@ -503,10 +491,10 @@ with col_cfg:
         idx_s += 1
 
 # ==========================================
-# GENERAZIONE E DOWNLOAD PREVENTIVO PDF
+# RIEPILOGO ECONOMICO & DOWNLOAD DIRETTO 1-CLICK
 # ==========================================
 st.markdown("---")
-st.header("5. Riepilogo Economico & Esportazione PDF")
+st.header("5. Riepilogo Economico & Download Preventivo")
 
 if st.session_state.carrello_hw:
     tot_hw = sum(item['totale'] for item in st.session_state.carrello_hw)
@@ -518,28 +506,28 @@ if st.session_state.carrello_hw:
     m1.metric("Totale Hardware di Listino", f"Euro {tot_hw:,.2f}")
     m2.metric("Ingegnerizzazione Inclusa", f"Euro {assistenza:,.2f}")
     m3.metric("Offerta a Corpo Finita", f"Euro {totale_finale:,.2f} + IVA")
-    m4.metric("Nodi Rete Totali", f"{nodi_tot} Nodi")
+    m4.metric("Nodi Rete Presidiati", f"{nodi_tot} Nodi")
 
     st.write("")
     
-    if st.button("🚀 GENERA PREVENTIVO PDF UFFICIALE", type="primary", use_container_width=True):
-        nome_pulito = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Proposta'}.pdf"
-        bytes_generati = genera_pdf_memorandum(
-            cliente, agente, note, acconto, tipo_contratto,
-            st.session_state.carrello_hw, servizi_selezionati, canoni_calcolati
-        )
-        st.session_state.pdf_pronto = bytes_generati
-        st.session_state.pdf_nomefile = nome_pulito
+    # Nome file personalizzato
+    nome_pulito = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Proposta'}.pdf"
 
-    if st.session_state.pdf_pronto is not None:
-        st.success(f"🎉 **Preventivo pronto per il download: {st.session_state.pdf_nomefile}**")
-        st.download_button(
-            label="📥 CLICCA QUI PER SCARICARE IL PREVENTIVO PDF (2 PAGINE)",
-            data=st.session_state.pdf_pronto,
-            file_name=st.session_state.pdf_nomefile,
-            mime="application/pdf",
-            type="secondary",
-            use_container_width=True
-        )
+    # Generazione istantanea in memoria (4 ms)
+    pdf_bytes = genera_pdf_memorandum(
+        cliente, agente, note, acconto, tipo_contratto,
+        st.session_state.carrello_hw, servizi_selezionati, canoni_calcolati
+    )
+
+    # PULSANTE DI DOWNLOAD UNICO DIRETTO
+    st.download_button(
+        label="📥 SCARICA IL PREVENTIVO PDF UFFICIALE (2 PAGINE)",
+        data=pdf_bytes,
+        file_name=nome_pulito,
+        mime="application/pdf",
+        type="primary",
+        use_container_width=True
+    )
 else:
-    st.warning("Aggiungi almeno un componente hardware alla distinta per poter generare e scaricare il PDF.")
+    st.info("👆 Seleziona un componente hardware e clicca **➕ Aggiungi** per comporre il preventivo.")
+    st.button("📥 SCARICA IL PREVENTIVO PDF (Aggiungi prima almeno un componente)", disabled=True, use_container_width=True)
