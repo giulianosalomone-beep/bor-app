@@ -194,7 +194,7 @@ def genera_pdf_commerciale(dati_testata, soluzioni_attive, upgrade_selezionati):
         "Full": "Massima protezione perimetrale e volumetrica. Abbatte tutte le vulnerabilita' e azzera totalmente i punti ciechi."
     }
     
-    if non soluzioni_attive:
+    if not soluzioni_attive:
         # Se vuoto mostra un placeholder
         pdf.cell(190, 10, "Nessuna soluzione compilata. Compilare il prospetto a penna.", 0, 1, 'C')
     else:
