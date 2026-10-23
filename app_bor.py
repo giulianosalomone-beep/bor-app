@@ -5,7 +5,7 @@ import datetime
 import os
 
 # ==========================================
-# 1. CATALOGO NATIVO IN MEMORIA (92 PRODOTTI + 26 SERVIZI)
+# 1. CATALOGO NATIVO IN MEMORIA (ZERO DISCO, ZERO LATENZA)
 # ==========================================
 CATALOGO_HARDWARE = [
     ("BOR-VisionServer4", "NVR 4 Canali con Hard Disk 2TB", "Videosorveglianza", 790.0, "NVR"),
@@ -131,7 +131,6 @@ CATALOGO_SERVIZI = [
     ("BOR-Svc-GateAlarmCheck", "Servizio di Controllo Varchi", "Servizi Mensili (Canoni)", 29.0)
 ]
 
-# Converti in DataFrame in memoria (0.0001 secondi)
 DF_PROD = pd.DataFrame(CATALOGO_HARDWARE, columns=['Codice Prodotto', 'Nome Articolo', 'Macrocategoria', 'Prezzo Unitario Listino', 'Tipo Nodo'])
 DF_SERV = pd.DataFrame(CATALOGO_SERVIZI, columns=['Codice Prodotto', 'Nome Articolo', 'Macrocategoria', 'Prezzo Unitario Listino'])
 
@@ -162,7 +161,7 @@ def calcola_assistenza_bor(nodi_totali):
     return 800.0 + (nodi_totali - 48) * 15.0
 
 # ==========================================
-# GENERATORE PDF OTTIMIZZATO (MEMORANDUM BOR)
+# CLASSE PDF MEMORANDUM BOR
 # ==========================================
 class MemorandumBOR_PDF(FPDF):
     def __init__(self, cliente, agente, note_progetto):
@@ -172,7 +171,6 @@ class MemorandumBOR_PDF(FPDF):
         self.note_progetto = safe_str(note_progetto)
 
     def header(self):
-        # Logo controllato in altezza: y=6, h=13 (non tocca la riga a y=24.5)
         if os.path.exists("logo_bor.png"):
             self.image("logo_bor.png", 10, 6, h=13)
         else:
@@ -215,9 +213,8 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     pdf = MemorandumBOR_PDF(cliente, agente, note)
     pdf.set_auto_page_break(auto=False, margin=10)
     
-    # ------------------ PAGINA 1 ------------------
+    # PAGINA 1
     pdf.add_page()
-    
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
     pdf.rect(10, 26, 190, 18, 'FD')
@@ -263,14 +260,13 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.set_y(47)
 
-    # 1. Investimento a Corpo
-    pdf.box_sezione("1. DIMENSIONAMENTO INFRASTRUTTURA HARDWARE (A CORPO)")
     tot_hw = sum(item['totale'] for item in carrello_hw)
     nodi_cam = sum(item['qt'] for item in carrello_hw if item['tipo_nodo'] == 'Camera')
     nodi_totali = sum(item['qt'] for item in carrello_hw if item['tipo_nodo'] in ['Camera', 'Audio', 'MSB_Fog', 'MSB_Sos', 'MSB_Gate'])
     assistenza = calcola_assistenza_bor(nodi_totali)
     totale_finale = tot_hw + assistenza
 
+    pdf.box_sezione("1. DIMENSIONAMENTO INFRASTRUTTURA HARDWARE (A CORPO)")
     pdf.set_fill_color(241, 245, 249)
     pdf.set_draw_color(203, 213, 225)
     pdf.rect(10, pdf.get_y(), 190, 24, 'FD')
@@ -295,7 +291,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.set_y(start_y + 28)
 
-    # 2. Dettaglio Hardware
     pdf.box_sezione("2. COMPONENTI HARDWARE SUDDIVISI PER MACROCATEGORIE")
     categorie_map = {}
     for item in carrello_hw:
@@ -306,7 +301,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
         pdf.set_font('Arial', 'B', 7.5)
         pdf.set_text_color(30, 58, 138)
         pdf.cell(48, 3.8, f"- {cat_nome}:", 0, 0)
-        
         dettagli_str = ", ".join([f"{p['qt']}x {p['nome']}" for p in prods])
         pdf.set_font('Arial', '', 7)
         pdf.set_text_color(51, 65, 85)
@@ -314,7 +308,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.ln(2)
 
-    # 3. Servizi inclusi (larghezza colonna 64 mm per evitare sovrapposizioni)
     pdf.box_sezione("3. SERVIZI BOR PER L'ATTIVAZIONE DEL SISTEMA (INCLUSI)")
     servizi_elenco = [
         ("Progettazione Tecnica Esecutiva", "Analisi vulnerabilita', coni visivi e piano planimetrico di copertura."),
@@ -333,7 +326,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.ln(2)
 
-    # Politica Posa in Opera
     pdf.set_fill_color(254, 242, 242)
     pdf.set_draw_color(254, 202, 202)
     pdf.rect(10, pdf.get_y(), 190, 12, 'FD')
@@ -345,10 +337,8 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     pdf.set_text_color(69, 10, 10)
     pdf.multi_cell(186, 3, "La stesura cavi e posa fisica puo' essere affidata all'elettricista di fiducia del cliente (guidato dalla nostra Direzione Lavori) oppure preventivata a parte richiedendo un Installatore Partner Certificato BOR.")
 
-    # ------------------ PAGINA 2 ------------------
+    # PAGINA 2
     pdf.add_page()
-
-    # 4. Canoni Telepresenza
     pdf.box_sezione("4. PROSPETTO CANONI MENSILI TELEPRESENZA E GUARDIANIA VIRTUALE")
     pdf.set_font('Arial', '', 7.5)
     pdf.set_text_color(51, 65, 85)
@@ -386,7 +376,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
 
     pdf.ln(3)
 
-    # 5. Moduli MSB
     if servizi_sel:
         pdf.box_sezione("5. UPGRADE SERVIZI MENSILI PERSONALIZZATI (MSB)")
         pdf.set_font('Arial', '', 7.5)
@@ -401,7 +390,6 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
             pdf.cell(0, 5, f'+ Euro {fmt_eur(s["prezzo"])} / mese', 0, 1, 'R')
         pdf.ln(2)
 
-    # 6. Clausole e Firme
     pdf.box_sezione("6. CLAUSOLE DI SALVAGUARDIA, GARANZIE E ACCONTO")
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(226, 232, 240)
@@ -450,7 +438,7 @@ def genera_pdf_memorandum(cliente, agente, note, acconto, tipo_contratto, carrel
     return bytes(raw_output)
 
 # ==========================================
-# INTERFACCIA STREAMLIT ULTRA-RAPIDA
+# INTERFACCIA STREAMLIT A FLUSSO GARANTITO
 # ==========================================
 st.set_page_config(page_title="BOR CPQ - Preventivatore Ufficiale", page_icon="🛡️", layout="wide")
 
@@ -465,10 +453,10 @@ col_dati, col_cfg = st.columns([1, 2])
 
 with col_dati:
     st.subheader("1. Dati Gestionali Offerta")
-    cliente = st.text_input("Ragione Sociale / Cliente", placeholder="Es. Ditta Rossi S.r.l.")
-    agente = st.text_input("Security Manager (Progettista)", placeholder="Es. Giuliano Salomone")
-    acconto = st.text_input("Acconto Proposto (Euro)", placeholder="Es. 1.500,00")
-    note = st.text_area("Note Progettuali / Specifiche Varchi", placeholder="Es. Copertura perimetrale esterna e varco merci...")
+    cliente = st.text_input("Ragione Sociale / Cliente", value="Spence", placeholder="Es. Ditta Rossi S.r.l.")
+    agente = st.text_input("Security Manager (Progettista)", value="Giuliano Salomone", placeholder="Es. Giuliano Salomone")
+    acconto = st.text_input("Acconto Proposto (Euro)", value="1.500,00", placeholder="Es. 1.500,00")
+    note = st.text_area("Note Progettuali / Specifiche Varchi", placeholder="Es. Copertura perimetrale esterna...")
 
     st.subheader("2. Parametri di Rischio")
     tipo_contratto = st.radio("Tipologia Contratto", ["Business (Garanzia 12 mesi)", "Residenziale (Garanzia 24 mesi)"])
@@ -495,7 +483,6 @@ with col_cfg:
     with c4:
         st.write("")
         st.write("")
-        # Nessun st.rerun(): aggiunta istantanea in memoria
         if st.button("➕ Aggiungi", use_container_width=True):
             riga_prod = prodotti_filtrati[prodotti_filtrati['Nome Articolo'] == prod_sel].iloc[0]
             st.session_state.carrello_hw.append({
@@ -507,6 +494,7 @@ with col_cfg:
                 "totale": float(riga_prod['Prezzo Unitario Listino']) * int(qt_sel),
                 "tipo_nodo": str(riga_prod['Tipo Nodo'])
             })
+            st.rerun()
 
     # Visualizzazione distinta carrello
     if st.session_state.carrello_hw:
@@ -528,9 +516,11 @@ with col_cfg:
         with b_col1:
             if st.button("🗑️ Rimuovi Ultimo Articolo", use_container_width=True):
                 st.session_state.carrello_hw.pop()
+                st.rerun()
         with b_col2:
             if st.button("⚠️ Svuota Intera Distinta", use_container_width=True):
                 st.session_state.carrello_hw = []
+                st.rerun()
     else:
         st.info("Nessun articolo inserito. Seleziona una macrocategoria e clicca '➕ Aggiungi'.")
 
@@ -582,46 +572,45 @@ with col_cfg:
         idx_s += 1
 
 # ==========================================
-# RIEPILOGO ECONOMICO E TASTO PDF DIRETTO
+# 5. RIEPILOGO ECONOMICO E TASTO PDF SEMPRE VISIBILE
 # ==========================================
 st.markdown("---")
 st.header("5. Riepilogo Economico & Esportazione PDF")
 
-ha_articoli = len(st.session_state.carrello_hw) > 0
+tot_hw = sum(item['totale'] for item in st.session_state.carrello_hw)
+nodi_tot = sum(item['qt'] for item in st.session_state.carrello_hw if item['tipo_nodo'] in ['Camera', 'Audio', 'MSB_Fog', 'MSB_Sos', 'MSB_Gate'])
+assistenza = calcola_assistenza_bor(nodi_tot) if st.session_state.carrello_hw else 0.0
+totale_finale = tot_hw + assistenza
 
-if ha_articoli:
-    tot_hw = sum(item['totale'] for item in st.session_state.carrello_hw)
-    nodi_tot = sum(item['qt'] for item in st.session_state.carrello_hw if item['tipo_nodo'] in ['Camera', 'Audio', 'MSB_Fog', 'MSB_Sos', 'MSB_Gate'])
-    assistenza = calcola_assistenza_bor(nodi_tot)
-    totale_finale = tot_hw + assistenza
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Totale Hardware Listino", f"Euro {fmt_eur(tot_hw)}")
+m2.metric("Ingegnerizzazione Inclusa", f"Euro {fmt_eur(assistenza)}")
+m3.metric("Offerta a Corpo Finita", f"Euro {fmt_eur(totale_finale)} + IVA")
+m4.metric("Nodi Rete Totali", f"{nodi_tot} Nodi")
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Totale Hardware Listino", f"Euro {fmt_eur(tot_hw)}")
-    m2.metric("Ingegnerizzazione Inclusa", f"Euro {fmt_eur(assistenza)}")
-    m3.metric("Offerta a Corpo Finita", f"Euro {fmt_eur(totale_finale)} + IVA")
-    m4.metric("Nodi Rete Totali", f"{nodi_tot} Nodi")
+st.write("")
+nome_pulito = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Proposta'}.pdf"
 
-    st.write("")
-    nome_pulito = f"Memorandum_BOR_{cliente.strip().replace(' ', '_') if cliente else 'Proposta'}.pdf"
+# TASTO FISSO E GARANTITO: Non sparisce mai!
+if st.button("🚀 GENERA E SCARICA IL PREVENTIVO PDF", type="primary", use_container_width=True):
+    if not st.session_state.carrello_hw:
+        st.warning("⚠️ La distinta è vuota. Aggiungi almeno un componente hardware prima di generare il PDF.")
+    else:
+        with st.spinner("Compilazione PDF ad alta risoluzione in corso..."):
+            pdf_bytes = genera_pdf_memorandum(
+                cliente, agente, note, acconto, tipo_contratto,
+                st.session_state.carrello_hw, servizi_selezionati, canoni_calcolati
+            )
+            st.session_state["ultimo_pdf"] = pdf_bytes
+            st.session_state["ultimo_pdf_nome"] = nome_pulito
 
-    pdf_bytes = genera_pdf_memorandum(
-        cliente, agente, note, acconto, tipo_contratto,
-        st.session_state.carrello_hw, servizi_selezionati, canoni_calcolati
-    )
-
+if "ultimo_pdf" in st.session_state and st.session_state["ultimo_pdf"]:
+    st.success(f"✅ Documento compilato con successo per: **{cliente}**")
     st.download_button(
-        label="🚀 SCARICA PREVENTIVO PDF UFFICIALE (2 PAGINE)",
-        data=pdf_bytes,
-        file_name=nome_pulito,
+        label="📥 CLICCA QUI PER EFFETTUARE IL DOWNLOAD DEL PDF (2 PAGINE)",
+        data=st.session_state["ultimo_pdf"],
+        file_name=st.session_state["ultimo_pdf_nome"],
         mime="application/pdf",
-        type="primary",
-        use_container_width=True
-    )
-else:
-    st.info("👆 Seleziona un componente hardware e clicca **➕ Aggiungi** per comporre l'offerta e sbloccare il download.")
-    st.download_button(
-        label="📥 Aggiungi almeno un componente per scaricare il PDF",
-        data=b"",
-        disabled=True,
+        type="secondary",
         use_container_width=True
     )
